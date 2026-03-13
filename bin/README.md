@@ -1,4 +1,4 @@
-# DC/DC Converter
+# Serial Controller
 
 An application for serial communication with embedded controllers, built with Java 21 and [jSerialComm](https://fazecast.github.io/jSerialComm/).
 
