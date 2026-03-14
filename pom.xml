@@ -66,7 +66,20 @@
 		    <artifactId>jackson-databind</artifactId>
 		    <version>${jackson.databind.version}</version>
 		</dependency>
-		
+		<!-- Source: https://mvnrepository.com/artifact/io.javalin.community.openapi/javalin-swagger-plugin -->
+		<dependency>
+		    <groupId>io.javalin.community.openapi</groupId>
+		    <artifactId>javalin-swagger-plugin</artifactId>
+		    <version>7.0.1</version>
+		</dependency>
+		<!-- Source: https://mvnrepository.com/artifact/io.javalin.community.openapi/javalin-openapi-plugin -->
+		<dependency>
+		    <groupId>io.javalin.community.openapi</groupId>
+		    <artifactId>javalin-openapi-plugin</artifactId>
+		    <version>7.0.1</version>
+		    <scope>compile</scope>
+		</dependency>
+
     </dependencies>
 
     <build>
@@ -80,6 +93,13 @@
                 <configuration>
                     <source>${maven.compiler.source}</source>
                     <target>${maven.compiler.target}</target>
+			        <annotationProcessorPaths>
+			            <path>
+			                <groupId>io.javalin.community.openapi</groupId>
+			                <artifactId>openapi-annotation-processor</artifactId>
+			                <version>7.0.1</version>
+			            </path>
+			        </annotationProcessorPaths>
                 </configuration>
             </plugin>
 

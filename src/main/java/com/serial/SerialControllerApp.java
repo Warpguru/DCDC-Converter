@@ -7,8 +7,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fazecast.jSerialComm.SerialPort;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fazecast.jSerialComm.SerialPort;
 import com.serial.devices.XY6008;
 import com.serial.modbus.ModbusConstants;
 import com.serial.modbus.ModbusTransport;
@@ -16,6 +16,12 @@ import com.serial.modbus.ModbusTransport;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.staticfiles.Location;
+import io.javalin.openapi.HttpMethod;
+import io.javalin.openapi.OpenApi;
+import io.javalin.openapi.OpenApiContent;
+import io.javalin.openapi.OpenApiResponse;
+import io.javalin.openapi.plugin.OpenApiPlugin;
+import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
 
 /**
  * Serial Controller Application - Iteration 1.
@@ -86,6 +92,16 @@ public class SerialControllerApp {
                 });
             });
 
+            // OpenAPI
+            config.registerPlugin(new OpenApiPlugin(openApiConfig -> {
+                openApiConfig.withDefinitionConfiguration((version, definition) -> {
+                    definition.info(info -> info.title("SerialController").version("1.0.0"));
+                });
+            }));
+
+            // This makes the UI available at /swagger
+            config.registerPlugin(new SwaggerPlugin());
+
         }).start(8000);
 
         // Background thread to push Modbus data to all connected clients
@@ -134,7 +150,8 @@ public class SerialControllerApp {
                 try {
                     // Simulate reading from Modbus
                     // String jsonUpdate = "{\"voltage\": 12.6, \"current\": 2.0}";
-                    String jsonUpdate = String.format("{\"voltage\": %.2f, \"current\": %.2f}", Math.random() * 12, currentSetting);
+                    String jsonUpdate = String.format("{\"voltage\": %.2f, \"current\": %.2f}", Math.random() * 12,
+                            currentSetting);
 
                     // Broadcast to all active WebSocket clients
                     clients.forEach(client -> {
@@ -161,7 +178,17 @@ public class SerialControllerApp {
 
     }
 
-    private void init(final Context ctx) {
+    // @formatter:off
+    @OpenApi(
+            path = "/init",
+            methods = HttpMethod.GET,
+            summary = "Get all users",
+            responses = {
+                @OpenApiResponse(status = "200", content = @OpenApiContent(from = String.class))
+            }
+        )
+    // @formatter:on
+    public void init(final Context ctx) {
         ctx.result("Abracadabra");
     }
 
