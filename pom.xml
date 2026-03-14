@@ -19,7 +19,8 @@
         <jserialcomm.version>2.11.4</jserialcomm.version>
         <slf4j.version>2.0.17</slf4j.version>
         <log4j.version>2.25.3</log4j.version>
-        <javalin.version>7.0.1</javalin.version>
+        <javalin.version>7.1.0</javalin.version>
+        <jackson.databind.version>2.21.1</jackson.databind.version>
         <main.class>com.serial.SerialControllerApp</main.class>
     </properties>
 
@@ -59,6 +60,13 @@
 		    <artifactId>javalin</artifactId>
 		    <version>${javalin.version}</version>
 		</dependency>
+		<!-- Source: https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-databind -->
+		<dependency>
+		    <groupId>com.fasterxml.jackson.core</groupId>
+		    <artifactId>jackson-databind</artifactId>
+		    <version>${jackson.databind.version}</version>
+		</dependency>
+		
     </dependencies>
 
     <build>

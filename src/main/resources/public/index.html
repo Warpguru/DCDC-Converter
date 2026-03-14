@@ -1,10 +1,198 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XY6008 — Live Monitor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 1rem;
+        }
+        h1 {
+            font-size: 1.6rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: #00d4ff;
+            letter-spacing: .5px;
+        }
+
+        /* Connection status badge */
+        #status {
+            display: inline-flex;
+            align-items: center;
+            gap: .5rem;
+            padding: .35rem .9rem;
+            border-radius: 999px;
+            font-size: .8rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+        }
+        #status .dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+        }
+        #status.connected      { background: rgba(0,200,83,.15); color: #00c853; }
+        #status.connected .dot { background: #00c853; }
+        #status.disconnected      { background: rgba(255,82,82,.15); color: #ff5252; }
+        #status.disconnected .dot { background: #ff5252; }
+
+        /* Data cards */
+        .cards {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 2rem;
+        }
+        .card {
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 12px;
+            padding: 1.5rem 2.5rem;
+            text-align: center;
+            min-width: 180px;
+        }
+        .card .label {
+            font-size: .75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #7f8fa6;
+            margin-bottom: .4rem;
+        }
+        .card .value {
+            font-size: 2.4rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+        .card .unit { font-size: 1rem; color: #7f8fa6; }
+        #voltageCard .value { color: #00d4ff; }
+        #currentCard .value { color: #ffc107; }
+
+        /* Message log */
+        .log-section {
+            width: 100%;
+            max-width: 600px;
+        }
+        .log-section h2 {
+            font-size: .85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #7f8fa6;
+            margin-bottom: .5rem;
+        }
+        #log {
+            list-style: none;
+            background: #0f0f23;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            padding: .75rem 1rem;
+            max-height: 240px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: .78rem;
+            line-height: 1.6;
+            color: #a0a0c0;
+        }
+        #log li { white-space: nowrap; }
+    </style>
 </head>
 <body>
-<h1>XY6008Test</h1>
-<p/>
-Welcome to XY6008Test!
-<p/>
+
+    <h1>XY6008 Live Monitor</h1>
+
+    <div id="status" class="disconnected">
+        <span class="dot"></span>
+        <span id="statusText">Disconnected</span>
+    </div>
+
+    <div class="cards">
+        <div class="card" id="voltageCard">
+            <div class="label">Voltage</div>
+            <div><span class="value" id="voltage">—</span> <span class="unit">V</span></div>
+        </div>
+        <div class="card" id="currentCard">
+            <div class="label">Current</div>
+            <div><span class="value" id="current">—</span> <span class="unit">A</span></div>
+        </div>
+    </div>
+
+    <div class="log-section">
+        <h2>Message Log</h2>
+        <ul id="log"></ul>
+    </div>
+
+    <script>
+        const statusEl   = document.getElementById('status');
+        const statusText = document.getElementById('statusText');
+        const voltageEl  = document.getElementById('voltage');
+        const currentEl  = document.getElementById('current');
+        const logEl      = document.getElementById('log');
+        const MAX_LOG    = 20;
+
+        let ws;
+        let reconnectDelay = 1000; // ms, doubles on each failure
+
+        function connect() {
+            const wsUrl = 'ws://' + window.location.host + '/ws/data';
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = function () {
+                reconnectDelay = 1000;
+                statusEl.className = 'connected';
+                statusText.textContent = 'Connected';
+                addLog('🟢 Connected to ' + wsUrl);
+            };
+
+            ws.onmessage = function (event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.voltage !== undefined) voltageEl.textContent = data.voltage.toFixed(2);
+                    if (data.current !== undefined) currentEl.textContent = data.current.toFixed(2);
+                    addLog(event.data);
+                } catch (e) {
+                    addLog('⚠ Non-JSON: ' + event.data);
+                }
+            };
+
+            ws.onclose = function () {
+                statusEl.className = 'disconnected';
+                statusText.textContent = 'Disconnected';
+                addLog('🔴 Disconnected — reconnecting in ' + (reconnectDelay / 1000) + 's');
+                scheduleReconnect();
+            };
+
+            ws.onerror = function () {
+                ws.close(); // triggers onclose → reconnect
+            };
+        }
+
+        function scheduleReconnect() {
+            setTimeout(function () {
+                reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+                connect();
+            }, reconnectDelay);
+        }
+
+        function addLog(msg) {
+            const li = document.createElement('li');
+            const ts = new Date().toLocaleTimeString();
+            li.textContent = ts + '  ' + msg;
+            logEl.prepend(li);
+            while (logEl.children.length > MAX_LOG) {
+                logEl.removeChild(logEl.lastChild);
+            }
+        }
+
+        // Start connection on page load
+        connect();
+    </script>
 </body>
 </html>
