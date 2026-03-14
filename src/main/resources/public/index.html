@@ -76,6 +76,94 @@
         #voltageCard .value { color: #00d4ff; }
         #currentCard .value { color: #ffc107; }
 
+        /* Current control panel */
+        .control-panel {
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 12px;
+            padding: 1.5rem 2.5rem;
+            text-align: center;
+            min-width: 320px;
+            margin-bottom: 2rem;
+        }
+        .control-panel .label {
+            font-size: .75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #7f8fa6;
+            margin-bottom: .8rem;
+        }
+        .control-panel .readout {
+            font-size: 2.4rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: #ffc107;
+            margin-bottom: .6rem;
+        }
+        .control-panel .readout .unit {
+            font-size: 1rem;
+            color: #7f8fa6;
+        }
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            justify-content: center;
+        }
+        .control-btn {
+            width: 40px; height: 40px;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            background: #1a1a2e;
+            color: #ffc107;
+            font-size: 1.4rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background .15s, border-color .15s;
+            user-select: none;
+        }
+        .control-btn:hover:not(:disabled) {
+            background: #0f3460;
+            border-color: #ffc107;
+        }
+        .control-btn:disabled {
+            opacity: .35;
+            cursor: not-allowed;
+        }
+        /* Custom range slider */
+        #currentSlider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 200px;
+            height: 6px;
+            border-radius: 3px;
+            background: #0f3460;
+            outline: none;
+        }
+        #currentSlider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px; height: 20px;
+            border-radius: 50%;
+            background: #ffc107;
+            cursor: pointer;
+            border: 2px solid #16213e;
+            box-shadow: 0 0 6px rgba(255,193,7,.4);
+        }
+        #currentSlider::-moz-range-thumb {
+            width: 20px; height: 20px;
+            border-radius: 50%;
+            background: #ffc107;
+            cursor: pointer;
+            border: 2px solid #16213e;
+        }
+        #currentSlider:disabled {
+            opacity: .35;
+        }
+
         /* Message log */
         .log-section {
             width: 100%;
@@ -124,6 +212,17 @@
         </div>
     </div>
 
+    <!-- Current Control Widget -->
+    <div class="control-panel" id="currentControlPanel">
+        <div class="label">Set Current</div>
+        <div class="readout"><span id="currentReadout">2.00</span> <span class="unit">A</span></div>
+        <div class="control-row">
+            <button class="control-btn" id="btnDecrement" title="−0.1 A" disabled>−</button>
+            <input type="range" id="currentSlider" min="0" max="2" step="0.1" value="2" disabled>
+            <button class="control-btn" id="btnIncrement" title="+0.1 A" disabled>+</button>
+        </div>
+    </div>
+
     <div class="log-section">
         <h2>Message Log</h2>
         <ul id="log"></ul>
@@ -137,8 +236,55 @@
         const logEl      = document.getElementById('log');
         const MAX_LOG    = 20;
 
+        // Current-control elements
+        const slider       = document.getElementById('currentSlider');
+        const readout      = document.getElementById('currentReadout');
+        const btnDec       = document.getElementById('btnDecrement');
+        const btnInc       = document.getElementById('btnIncrement');
+        let   currentSetting = 2.00;
+
         let ws;
         let reconnectDelay = 1000; // ms, doubles on each failure
+
+        /* ---- Current-control helpers ---- */
+
+        function updateCurrentUI() {
+            readout.textContent = currentSetting.toFixed(2);
+            slider.value = currentSetting;
+        }
+
+        function sendCurrentSetting() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ setCurrent: currentSetting }));
+                addLog('⚡ Set current → ' + currentSetting.toFixed(2) + ' A');
+            }
+        }
+
+        function setControlsEnabled(enabled) {
+            slider.disabled  = !enabled;
+            btnDec.disabled  = !enabled;
+            btnInc.disabled  = !enabled;
+        }
+
+        slider.addEventListener('input', function () {
+            currentSetting = parseFloat(slider.value);
+            updateCurrentUI();
+            sendCurrentSetting();
+        });
+
+        btnDec.addEventListener('click', function () {
+            currentSetting = Math.max(0, +(currentSetting - 0.1).toFixed(1));
+            updateCurrentUI();
+            sendCurrentSetting();
+        });
+
+        btnInc.addEventListener('click', function () {
+            currentSetting = Math.min(2, +(currentSetting + 0.1).toFixed(1));
+            updateCurrentUI();
+            sendCurrentSetting();
+        });
+
+        /* ---- WebSocket ---- */
 
         function connect() {
             const wsUrl = 'ws://' + window.location.host + '/ws/data';
@@ -148,7 +294,10 @@
                 reconnectDelay = 1000;
                 statusEl.className = 'connected';
                 statusText.textContent = 'Connected';
+                setControlsEnabled(true);
                 addLog('🟢 Connected to ' + wsUrl);
+                // Send current setting immediately on connect
+                sendCurrentSetting();
             };
 
             ws.onmessage = function (event) {
@@ -165,6 +314,7 @@
             ws.onclose = function () {
                 statusEl.className = 'disconnected';
                 statusText.textContent = 'Disconnected';
+                setControlsEnabled(false);
                 addLog('🔴 Disconnected — reconnecting in ' + (reconnectDelay / 1000) + 's');
                 scheduleReconnect();
             };

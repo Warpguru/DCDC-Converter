@@ -1,5 +1,6 @@
 package com.serial;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -7,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fazecast.jSerialComm.SerialPort;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.serial.devices.XY6008;
 import com.serial.modbus.ModbusConstants;
 import com.serial.modbus.ModbusTransport;
@@ -26,6 +28,10 @@ public class SerialControllerApp {
 
     // Keep track of connected clients to broadcast updates
     private static final Set<io.javalin.websocket.WsContext> clients = ConcurrentHashMap.newKeySet();
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    /** Current setting in amperes, adjustable via the GUI (0.00 – 2.00 A). */
+    private static volatile double currentSetting = 2.00;
 
     public static void main(String[] args) throws Exception {
         logger.info("Serial Controller started.");
@@ -54,7 +60,21 @@ public class SerialControllerApp {
                     logger.info("WebSocket client connected (total: {})", clients.size());
                 });
                 ws.onMessage(ctx -> {
-                    logger.info("WebSocket message received: {}", ctx.message());
+                    String msg = ctx.message();
+                    logger.info("WebSocket message received: {}", msg);
+                    try {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> json = objectMapper.readValue(msg, Map.class);
+                        if (json.containsKey("setCurrent")) {
+                            double value = ((Number) json.get("setCurrent")).doubleValue();
+                            // Clamp to 0.00 – 2.00 and round to 1 decimal
+                            value = Math.round(Math.max(0, Math.min(2, value)) * 10.0) / 10.0;
+                            currentSetting = value;
+                            logger.info("Current setting updated to {} A", currentSetting);
+                        }
+                    } catch (Exception e) {
+                        logger.warn("Failed to parse WebSocket message: {}", e.getMessage());
+                    }
                 });
                 ws.onClose(ctx -> {
                     clients.remove(ctx);
@@ -114,7 +134,7 @@ public class SerialControllerApp {
                 try {
                     // Simulate reading from Modbus
                     // String jsonUpdate = "{\"voltage\": 12.6, \"current\": 2.0}";
-                    String jsonUpdate = String.format("{\"voltage\": %.2f, \"current\": 2.0}", Math.random() * 12);
+                    String jsonUpdate = String.format("{\"voltage\": %.2f, \"current\": %.2f}", Math.random() * 12, currentSetting);
 
                     // Broadcast to all active WebSocket clients
                     clients.forEach(client -> {
