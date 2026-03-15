@@ -9,7 +9,7 @@ package com.serial.device;
  * </p>
  *
  * <p>
- * Many laboratory devices, including programmable power supplies such as XY6008Old or Riden modules, represent values in
+ * Many laboratory devices, including programmable power supplies such as XY6008Old or RidenRD60xx modules, represent values in
  * registers using fixed-point scaling. For example:
  * </p>
  *

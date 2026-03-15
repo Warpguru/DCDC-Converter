@@ -1,12 +1,12 @@
 package com.serial.device;
 
-import com.serial.devices.Riden;
+import com.serial.devices.RidenRD60xx;
 
 /**
  * Register map for {@code Sinilink} programmable DC power supply.
  *
  * <p>
- * The Sinilink exposes a smaller {@code Modbus} register map than the {@link Riden} It provides no information such as serial numbers,
+ * The Sinilink exposes a smaller {@code Modbus} register map than the {@link RidenRD60xx} It provides no information such as serial numbers,
  * energy counters, CV/CC state, keypad lock, and battery mode registers.
  * </p>
  *

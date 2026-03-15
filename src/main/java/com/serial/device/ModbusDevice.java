@@ -17,7 +17,7 @@ import com.serial.modbus.ModbusTransport;
  * </p>
  *
  * <p>
- * Typical usage involves creating a device-specific subclass (for example {@code Sinilink} or {@code Riden}) that defines
+ * Typical usage involves creating a device-specific subclass (for example {@code Sinilink} or {@code RidenRD60xx}) that defines
  * register descriptors and exposes convenient domain-specific methods such as {@code setVoltage()} or {@code getCurrent()}.
  * </p>
  *

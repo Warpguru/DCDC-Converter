@@ -10,6 +10,8 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fazecast.jSerialComm.SerialPort;
 import com.serial.devices.DC2DCConverter;
+import com.serial.devices.RidenRD50xx;
+import com.serial.devices.RidenRD60xx;
 import com.serial.devices.Sinilink;
 import com.serial.modbus.ModbusConstants;
 import com.serial.modbus.ModbusTransport;
@@ -221,20 +223,37 @@ public class SerialControllerApp {
     private void demoVoltages(@Deprecated final String portName) throws Exception {
         ModbusTransport transport = null;
         try {
-            transport = new ModbusTransport(portName, ModbusConstants.BAUD);
+//            transport = new ModbusTransport(portName, ModbusConstants.BAUD_115200);
+          transport = new ModbusTransport(portName, ModbusConstants.BAUD_9600);
         } catch (Exception e) {
-            System.out.println("Usage: XY6008TestTool <port>");
+            System.out.println("Usage: SerialControllerApp <port>");
             System.out.println("       Port: " + portName + " invalid!");
             return;
         }
-        Sinilink sinilink = new Sinilink(transport, ModbusConstants.SLAVE_ADDRESS);
+        DC2DCConverter dc2dcConverter = null;
+        
+        Sinilink sinilink = new Sinilink(transport, ModbusConstants.SLAVE_ADDRESS_1);
         if (!sinilink.verifyDevicePresent()) {
             System.out.println("No Sinilink detected on this port.");
+        } else {
+            dc2dcConverter = sinilink;
+        }
+        RidenRD50xx ridenRD50xx = new RidenRD50xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
+        if (!ridenRD50xx.verifyDevicePresent()) {
+            System.out.println("No RidenRD50xx detected on this port.");
+        } else {
+            dc2dcConverter = ridenRD50xx;
+        }
+        RidenRD60xx ridenRD60xx = new RidenRD60xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
+        if (!ridenRD60xx.verifyDevicePresent()) {
+            System.out.println("No RidenRD60xx detected on this port.");
+        } else {
+            dc2dcConverter = ridenRD60xx;
+        }
+        if (dc2dcConverter == null) {
             transport.close();
             return;
         }
-
-        DC2DCConverter dc2dcConverter = sinilink;
         for (int i = 1; i <= 3; i++) {
             System.out.println("\n=== TEST CYCLE " + i + " ===");
             dc2dcConverter.setVoltageVerified(5.0);
