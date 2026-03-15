@@ -101,8 +101,11 @@ public class ModbusTransport {
         int crc = ModbusCRC.calculate(frame, 6);
         frame[6] = (byte) crc;
         frame[7] = (byte) (crc >> 8);
+        log("TX", frame);
         out.write(frame);
+        out.flush();
         byte[] resp = readBytes(7);
+        log("RX", resp);
         verifyCRC(resp);
         return ((resp[3] & 0xFF) << 8) | (resp[4] & 0xFF);
     }
@@ -170,9 +173,22 @@ public class ModbusTransport {
         int crc = ModbusCRC.calculate(frame, 6);
         frame[6] = (byte) crc;
         frame[7] = (byte) (crc >> 8);
+        log("TX", frame);
+        
         out.write(frame);
+        out.flush();
         byte[] resp = readBytes(8);
+        log("RX", resp);
         verifyCRC(resp);
+    }
+
+    // TODO: Improve logging
+    @Deprecated
+    void log(String dir, byte[] data) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : data)
+            sb.append(String.format("%02X ", b));
+        System.out.println(dir + "  " + sb);
     }
 
     /**

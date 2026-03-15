@@ -9,7 +9,8 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fazecast.jSerialComm.SerialPort;
-import com.serial.devices.XY6008;
+import com.serial.devices.DC2DCConverter;
+import com.serial.devices.Sinilink;
 import com.serial.modbus.ModbusConstants;
 import com.serial.modbus.ModbusTransport;
 
@@ -50,6 +51,24 @@ public class SerialControllerApp {
         if (args.length == 0) {
             System.out.println("Usage: XY6008TestTool <port>");
             return;
+        }
+
+        // Enumerate serial ports
+        logger.info("Enumerating serial ports...");
+        SerialPort[] serialPorts = SerialPort.getCommPorts();
+        if (serialPorts.length == 0) {
+            String noPortsMessage = "No serial ports found on this system.";
+            System.out.println(noPortsMessage);
+            logger.warn(noPortsMessage);
+        } else {
+            String foundMessage = String.format("Found %d serial port(s):", serialPorts.length);
+            System.out.println(foundMessage);
+            logger.info(foundMessage);
+
+            for (SerialPort serialPort : serialPorts) {
+                printPortDetails(serialPort);
+                demoVoltages(serialPort.getSystemPortName());
+            }
         }
 
         Javalin javalin = Javalin.create(config -> {
@@ -109,39 +128,6 @@ public class SerialControllerApp {
 
         sleepSeconds(600);
         javalin.stop();
-
-        ModbusTransport transport = null;
-        try {
-            transport = new ModbusTransport(args[0], ModbusConstants.BAUD);
-        } catch (Exception e) {
-            System.out.println("Usage: XY6008TestTool <port>");
-            System.out.println("       Port: " + args[0] + " invalid!");
-            return;
-        }
-        XY6008 xy6008 = new XY6008(transport, ModbusConstants.SLAVE_ADDRESS);
-        if (!xy6008.verifyDevicePresent()) {
-            System.out.println("No XY6008 detected on this port.");
-            transport.close();
-            return;
-        }
-
-        for (int i = 1; i <= 3; i++) {
-            System.out.println("\n=== TEST CYCLE " + i + " ===");
-            xy6008.setVoltage(5.0);
-            double voltage = xy6008.getVoltage();
-            double current = xy6008.getCurrent();
-            double power = xy6008.getPower();
-            System.out.println("V=" + voltage + " I=" + current + " P=" + power);
-            sleepSeconds(1);
-
-            xy6008.setVoltage(3.3);
-            sleepSeconds(1);
-            voltage = xy6008.getVoltage();
-            current = xy6008.getCurrent();
-            power = xy6008.getPower();
-            System.out.println("V=" + voltage + " I=" + current + " P=" + power);
-        }
-        transport.close();
     }
 
     private static void startUpdateThread() {
@@ -174,7 +160,7 @@ public class SerialControllerApp {
     public record Status(double voltage, double current) {
     }
 
-    private void config(final Context ctx) {
+    public void config(final Context ctx) {
 
     }
 
@@ -190,13 +176,6 @@ public class SerialControllerApp {
     // @formatter:on
     public void init(final Context ctx) {
         ctx.result("Abracadabra");
-    }
-
-    private void log(String dir, byte[] data) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : data)
-            sb.append(String.format("%02X ", b));
-        System.out.println(dir + "  " + sb);
     }
 
     private void sleepSeconds(final int seconds) throws Exception {
@@ -232,6 +211,49 @@ public class SerialControllerApp {
                 description, location, manufacturer, serialNumber, usbId);
     }
 
+    /**
+     * Demo setting output voltage alternatively to {@code 5V} and {@code 3.3V}.
+     * 
+     * @param portName to use
+     * @throws Exception
+     */
+    @Deprecated
+    private void demoVoltages(@Deprecated final String portName) throws Exception {
+        ModbusTransport transport = null;
+        try {
+            transport = new ModbusTransport(portName, ModbusConstants.BAUD);
+        } catch (Exception e) {
+            System.out.println("Usage: XY6008TestTool <port>");
+            System.out.println("       Port: " + portName + " invalid!");
+            return;
+        }
+        Sinilink sinilink = new Sinilink(transport, ModbusConstants.SLAVE_ADDRESS);
+        if (!sinilink.verifyDevicePresent()) {
+            System.out.println("No Sinilink detected on this port.");
+            transport.close();
+            return;
+        }
+
+        DC2DCConverter dc2dcConverter = sinilink;
+        for (int i = 1; i <= 3; i++) {
+            System.out.println("\n=== TEST CYCLE " + i + " ===");
+            dc2dcConverter.setVoltageVerified(5.0);
+            double voltage = dc2dcConverter.getVoltage();
+            double current = dc2dcConverter.getCurrent();
+            double power = dc2dcConverter.getPower();
+            System.out.println("V=" + voltage + " I=" + current + " P=" + power);
+            sleepSeconds(1);
+
+            dc2dcConverter.setVoltageVerified(3.3);
+            sleepSeconds(1);
+            voltage = dc2dcConverter.getVoltage();
+            current = dc2dcConverter.getCurrent();
+            power = dc2dcConverter.getPower();
+            System.out.println("V=" + voltage + " I=" + current + " P=" + power);
+        }
+        transport.close();
+    }
+   
     /**
      * Returns the given value if it is non-null and non-empty, otherwise "N/A".
      *

@@ -1,6 +1,17 @@
 package com.serial.devices;
 
+/**
+ * Common interfaces for {@code DC/DC Converter}s.
+ */
 public interface DC2DCConverter {
+
+    /**
+     * Set output voltage verified.
+     * 
+     * @param volts
+     * @throws Exception
+     */
+    public void setVoltageVerified(final double volts) throws Exception;
 
     /**
      * Set output voltage.
@@ -17,6 +28,14 @@ public interface DC2DCConverter {
      * @throws Exception
      */
     public double getVoltage() throws Exception;
+
+    /**
+     * Set output current verified.
+     * 
+     * @param amperes
+     * @throws Exception
+     */
+    public void setCurrentVerified(final double amperes) throws Exception;
 
     /**
      * Set output current.

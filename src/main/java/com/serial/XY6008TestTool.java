@@ -1,6 +1,6 @@
 package com.serial;
 
-import com.serial.devices.XY6008;
+import com.serial.devices.Sinilink;
 import com.serial.modbus.ModbusConstants;
 import com.serial.modbus.ModbusTransport;
 
@@ -40,9 +40,9 @@ public class XY6008TestTool {
             System.out.println("       Port: " + args[0] + " invalid!");
             return;
         }
-        XY6008 xy6008 = new XY6008(transport, ModbusConstants.SLAVE_ADDRESS);
+        Sinilink xy6008 = new Sinilink(transport, ModbusConstants.SLAVE_ADDRESS);
         if (!xy6008.verifyDevicePresent()) {
-            System.out.println("No XY6008 detected on this port.");
+            System.out.println("No Sinilink detected on this port.");
             transport.close();
             return;
         }
