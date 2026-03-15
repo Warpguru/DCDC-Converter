@@ -2,75 +2,75 @@ package com.serial.devices;
 
 import com.serial.device.DeviceRegister;
 import com.serial.device.ModbusDevice;
-import com.serial.device.RidenRegisters;
+import com.serial.device.RidenRegistersRD60xx;
 import com.serial.modbus.ModbusTransport;
 
 /**
- * {@code Riden} (e.g. {@code RD6030}) {@code Modbus} to {@code TTL} 3.3V {@code serial} connection.
+ * {@code RidenRD60xx} (e.g. {@code RD6030}) {@code Modbus} to {@code TTL} 3.3V {@code serial} connection.
  * 
  * <ul>
- * <li>Riden Black:  → Gnd
- * <li>Riden Green:  → TxD
- * <li>Riden Yellow: → RxD
- * <li>Riden Red:    → NC (5V)
+ * <li>RidenRD60xx Black:  → Gnd
+ * <li>RidenRD60xx ?:  → TxD
+ * <li>RidenRD60xx ?: → RxD
+ * <li>RidenRD60xx Red:    → NC (5V)
  * </ul>
  */
-public class Riden extends ModbusDevice implements DC2DCConverter {
+public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
 
-    public static final DeviceRegister DEVICE_ID = new DeviceRegister("Model Identification", null, RidenRegisters.REG_DEVICE_ID);
+    public static final DeviceRegister DEVICE_ID = new DeviceRegister("Model Identification", null, RidenRegistersRD60xx.REG_DEVICE_ID);
 
-    public static final DeviceRegister FIRMWARE_VERSION = new DeviceRegister("Firmware Version", null, RidenRegisters.REG_FIRMWARE);
+    public static final DeviceRegister FIRMWARE_VERSION = new DeviceRegister("Firmware Version", null, RidenRegistersRD60xx.REG_FIRMWARE, 100);
 
     public static final DeviceRegister TEMP_SIGN_CELSIUS = new DeviceRegister("Temperature Sign", null, 
-            RidenRegisters.REG_TEMP_CELSIUS);
+            RidenRegistersRD60xx.REG_TEMP_SIGN_CELSIUS);
 
     public static final DeviceRegister TEMP_CELSIUS = new DeviceRegister("Temperature Celsius", "°C",
-            RidenRegisters.REG_TEMP_CELSIUS);
+            RidenRegistersRD60xx.REG_TEMP_CELSIUS);
 
     public static final DeviceRegister TEMP_SIGN_FAHRENHEIT = new DeviceRegister("Temperature Sign", null,
-            RidenRegisters.REG_TEMP_FAHRENHEIT);
+            RidenRegistersRD60xx.REG_TEMP_FAHRENHEIT);
 
     public static final DeviceRegister TEMP_FAHRENHEIT = new DeviceRegister("Temperature Fahrenheit", "°F",
-            RidenRegisters.REG_TEMP_FAHRENHEIT);
+            RidenRegistersRD60xx.REG_TEMP_FAHRENHEIT);
 
-    public static final DeviceRegister VSET = new DeviceRegister("Voltage Setpoint", "V", RidenRegisters.REG_VSET, 100);
+    public static final DeviceRegister VSET = new DeviceRegister("Voltage Setpoint", "V", RidenRegistersRD60xx.REG_VSET, 100);
 
-    public static final DeviceRegister ISET = new DeviceRegister("Current Setpoint", "A", RidenRegisters.REG_ISET, 1000);
+    public static final DeviceRegister ISET = new DeviceRegister("Current Setpoint", "A", RidenRegistersRD60xx.REG_ISET, 1000);
 
-    public static final DeviceRegister VOUT = new DeviceRegister("Output Voltage", "V", RidenRegisters.REG_VOUT, 100);
+    public static final DeviceRegister VOUT = new DeviceRegister("Output Voltage", "V", RidenRegistersRD60xx.REG_VOUT, 100);
 
-    public static final DeviceRegister IOUT = new DeviceRegister("Output Current", "A", RidenRegisters.REG_IOUT, 1000);
+    public static final DeviceRegister IOUT = new DeviceRegister("Output Current", "A", RidenRegistersRD60xx.REG_IOUT, 1000);
 
-    public static final DeviceRegister AH = new DeviceRegister("Accumulated Amperehours", "Ah", RidenRegisters.REG_AH);
+    public static final DeviceRegister AH = new DeviceRegister("Accumulated Amperehours", "Ah", RidenRegistersRD60xx.REG_AH);
 
-    public static final DeviceRegister POUT = new DeviceRegister("Output Power", "W", RidenRegisters.REG_POUT, 1000);
+    public static final DeviceRegister POUT = new DeviceRegister("Output Power", "W", RidenRegistersRD60xx.REG_POUT, 1000);
 
-    public static final DeviceRegister VIN = new DeviceRegister("Voltage Input", "V", RidenRegisters.REG_VIN, 100);
+    public static final DeviceRegister VIN = new DeviceRegister("Voltage Input", "V", RidenRegistersRD60xx.REG_VIN, 100);
 
-    public static final DeviceRegister LOCK = new DeviceRegister("Keypad Lock", null, RidenRegisters.REG_KEYPAD_LOCK);
+    public static final DeviceRegister LOCK = new DeviceRegister("Keypad Lock", null, RidenRegistersRD60xx.REG_KEYPAD_LOCK);
 
     public static final DeviceRegister PROTECTION_STATE = new DeviceRegister("Protection Status", null,
-            RidenRegisters.REG_PROTECTION_STATE);
+            RidenRegistersRD60xx.REG_PROTECTION_STATE);
 
-    public static final DeviceRegister MODE = new DeviceRegister("CC/CV Mode", null, RidenRegisters.REG_MODE);
+    public static final DeviceRegister MODE = new DeviceRegister("CC/CV Mode", null, RidenRegistersRD60xx.REG_MODE);
 
-    public static final DeviceRegister OUTPUT_ENABLE = new DeviceRegister("Output Enable", null, RidenRegisters.REG_OUTPUT_ENABLE);
+    public static final DeviceRegister OUTPUT_ENABLE = new DeviceRegister("Output Enable", null, RidenRegistersRD60xx.REG_OUTPUT_ENABLE);
 
-    public static final DeviceRegister PRESET = new DeviceRegister("Preset Selector", "Mx", RidenRegisters.REG_PRESET);
+    public static final DeviceRegister PRESET = new DeviceRegister("Preset Selector", "Mx", RidenRegistersRD60xx.REG_PRESET);
 
-    public static final DeviceRegister IRANGE = new DeviceRegister("Current Range", "A", RidenRegisters.REG_CURRENT_RANGE);
+    public static final DeviceRegister IRANGE = new DeviceRegister("Current Range", "A", RidenRegistersRD60xx.REG_CURRENT_RANGE);
 
-    public Riden(ModbusTransport transport, byte slave) {
+    public RidenRD60xx(ModbusTransport transport, byte slave) {
         super(transport, slave);
     }
 
     /**
-     * Verify that {@code Riden} is present.
+     * Verify that {@code RidenRD60xx} is present.
      * 
      * @return true or false
      */
     public boolean verifyDevicePresent() {
-        System.out.println("Checking for Riden device...");
+        System.out.println("Checking for RidenRD60xx device...");
         boolean devicePresent = false;
         // Try firmware register
         try {
@@ -95,7 +95,7 @@ public class Riden extends ModbusDevice implements DC2DCConverter {
             System.out.println("Hardware register read failed: " + e.getMessage());
         }
         if (devicePresent == false) {
-            System.out.println("No Riden detected.");
+            System.out.println("No RidenRD60xx detected.");
         } else {
             // Device detected
         }

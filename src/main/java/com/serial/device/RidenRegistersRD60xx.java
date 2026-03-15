@@ -3,15 +3,15 @@ package com.serial.device;
 import com.serial.devices.Sinilink;
 
 /**
- * Register map for {@code Riden} programmable DC power supply.
+ * Register map for the newer {@code RidenRD60xx} programmable DC power supply (e.g. {@code RD6030}.
  *
  * <p>
- * The Riden exposes a larger {@code Modbus} register map than the {@link Sinilink}. It provides additional information such as serial numbers,
+ * The RidenRD60xx exposes a larger {@code Modbus} register map than the {@link Sinilink}. It provides additional information such as serial numbers,
  * energy counters, CV/CC state, keypad lock, and battery mode registers.
  * </p>
  *
  * <p>
- * Scaling factors are typically identical to other Riden supplies:
+ * Scaling factors are typically identical to other RidenRD60xx supplies:
  * </p>
  *
  * <ul>
@@ -20,12 +20,12 @@ import com.serial.devices.Sinilink;
  * <li>Power values: raw / 100 = watts</li>
  * </ul>
  */
-public final class RidenRegisters {
+public final class RidenRegistersRD60xx {
 
     /**
      * Constructor.
      */
-    private RidenRegisters() {
+    private RidenRegistersRD60xx() {
     }
 
     /**
@@ -36,7 +36,7 @@ public final class RidenRegisters {
      * Example values:
      *
      * <pre>
-     * 6030 -> Riden
+     * 6030 -> RidenRD60xx
      * </pre>
      */
     public static final int REG_DEVICE_ID = 0x0000;

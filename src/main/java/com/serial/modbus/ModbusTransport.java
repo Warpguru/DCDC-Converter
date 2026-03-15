@@ -44,7 +44,7 @@ public class ModbusTransport {
     }
 
     /**
-     * Reads a single 16-bit holding register from the XY6008Old using Modbus RTU.
+     * Reads a single 16-bit holding register from the Sinilink using Modbus RTU.
      *
      * <p>
      * The method sends a Modbus "Read Holding Registers" request (function code 0x03) and returns the value of the requested
@@ -92,12 +92,12 @@ public class ModbusTransport {
      */
     public int readRegister(final byte slave, final int reg) throws Exception {
         byte[] frame = new byte[8];
-        frame[0] = slave; // ModbusConstants.SLAVE_ADDRESS;
+        frame[0] = slave; // ModbusConstants.SLAVE_ADDRESS_1;
         frame[1] = ModbusFunctionCodes.READ_HOLDING_REGISTERS;
         frame[2] = (byte) (reg >> 8);
         frame[3] = (byte) reg;
         frame[4] = 0;
-        frame[5] = 1;
+        frame[5] = 1; // Read 1 register
         int crc = ModbusCRC.calculate(frame, 6);
         frame[6] = (byte) crc;
         frame[7] = (byte) (crc >> 8);
@@ -130,7 +130,7 @@ public class ModbusTransport {
      * </p>
      *
      * <p>
-     * Many XY6008Old parameters require scaled integer values.
+     * Many Sinilink parameters require scaled integer values.
      * </p>
      *
      * <p>
@@ -164,7 +164,7 @@ public class ModbusTransport {
      */
     public void writeRegister(final byte slave, final int reg, int value) throws Exception {
         byte[] frame = new byte[8];
-        frame[0] = slave; // ModbusConstants.SLAVE_ADDRESS;
+        frame[0] = slave; // ModbusConstants.SLAVE_ADDRESS_1;
         frame[1] = ModbusFunctionCodes.WRITE_SINGLE_REGISTER;
         frame[2] = (byte) (reg >> 8);
         frame[3] = (byte) reg;
