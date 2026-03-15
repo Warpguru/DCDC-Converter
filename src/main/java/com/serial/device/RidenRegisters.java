@@ -1,10 +1,12 @@
 package com.serial.device;
 
+import com.serial.devices.Sinilink;
+
 /**
- * Register map for RD6030 programmable DC power supply.
+ * Register map for {@code Riden} programmable DC power supply.
  *
  * <p>
- * The RD6030 exposes a larger {@code Modbus} register map than the XY6008Old. It provides additional information such as serial numbers,
+ * The Riden exposes a larger {@code Modbus} register map than the {@link Sinilink}. It provides additional information such as serial numbers,
  * energy counters, CV/CC state, keypad lock, and battery mode registers.
  * </p>
  *
@@ -18,12 +20,12 @@ package com.serial.device;
  * <li>Power values: raw / 100 = watts</li>
  * </ul>
  */
-public final class RD6030Registers {
+public final class RidenRegisters {
 
     /**
      * Constructor.
      */
-    private RD6030Registers() {
+    private RidenRegisters() {
     }
 
     /**
@@ -34,7 +36,7 @@ public final class RD6030Registers {
      * Example values:
      *
      * <pre>
-     * 6030 -> RD6030
+     * 6030 -> Riden
      * </pre>
      */
     public static final int REG_DEVICE_ID = 0x0000;

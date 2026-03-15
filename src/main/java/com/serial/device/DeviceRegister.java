@@ -9,7 +9,7 @@ package com.serial.device;
  * </p>
  *
  * <p>
- * Many laboratory devices, including programmable power supplies such as XY6008Old or RD6030 modules, represent values in
+ * Many laboratory devices, including programmable power supplies such as XY6008Old or Riden modules, represent values in
  * registers using fixed-point scaling. For example:
  * </p>
  *
@@ -57,7 +57,22 @@ public class DeviceRegister {
      * {@code Modbus} register name.
      */
     public final String name;
-    
+
+    /**
+     * {@code Modubus} register unit.
+     * 
+     * <p>
+     * Example:
+     * </p>
+     *
+     * <pre>
+     * V -> Volts
+     * A -> Amperes
+     * W -> Watts
+     * </pre>
+     */
+    public final String unit;
+
     /**
      * {@code Modbus} register address.
      *
@@ -98,11 +113,13 @@ public class DeviceRegister {
      * Creates a register description.
      *
      * @param name    Modbus register name
+     * @param unit    Modbus register unit
      * @param address Modbus register address
      * @param scale   scaling factor used for encoding and decoding values
      */
-    public DeviceRegister(final String name, final int address, final double scale) {
+    public DeviceRegister(final String name, final String unit, final int address, final double scale) {
         this.name = name;
+        this.unit = unit;
         this.address = address;
         this.scale = scale;
     }
@@ -111,10 +128,12 @@ public class DeviceRegister {
      * Creates a register description.
      *
      * @param name    Modbus register name
+     * @param unit    Modbus register unit
      * @param address Modbus register address
      */
-    public DeviceRegister(final String name, final int address) {
+    public DeviceRegister(final String name, final String unit, final int address) {
         this.name = name;
+        this.unit = unit;
         this.address = address;
         this.scale = 1;
     }

@@ -15,7 +15,6 @@ import com.fazecast.jSerialComm.SerialPort;
  * <li>Red: NC (5V)
  * </ul>
  */
-
 public class TestXY6008 {
 
     static final int BAUD = 115200;

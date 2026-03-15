@@ -17,7 +17,7 @@ import com.serial.modbus.ModbusTransport;
  * </p>
  *
  * <p>
- * Typical usage involves creating a device-specific subclass (for example {@code XY6008} or {@code RD6030}) that defines
+ * Typical usage involves creating a device-specific subclass (for example {@code Sinilink} or {@code Riden}) that defines
  * register descriptors and exposes convenient domain-specific methods such as {@code setVoltage()} or {@code getCurrent()}.
  * </p>
  *
@@ -28,10 +28,10 @@ import com.serial.modbus.ModbusTransport;
  * <pre>
  * ModbusTransport transport = new ModbusTransport("/dev/ttyUSB0", 115200);
  *
- * XY6008 psu = new XY6008(transport, (byte) 1);
+ * Sinilink psu = new Sinilink(transport, (byte) 1);
  *
- * psu.write(XY6008.VSET, 5.0); // set voltage to 5 V
- * double v = psu.read(XY6008.VOUT); // read measured output voltage
+ * psu.write(Sinilink.VSET, 5.0); // set voltage to 5 V
+ * double v = psu.read(Sinilink.VOUT); // read measured output voltage
  * </pre>
  *
  * <p>
@@ -40,6 +40,8 @@ import com.serial.modbus.ModbusTransport;
  * </p>
  */
 public abstract class ModbusDevice {
+
+    protected static final int MAX_RETRY = 3;
 
     /**
      * Transport layer used for Modbus communication.
@@ -90,7 +92,7 @@ public abstract class ModbusDevice {
      * </p>
      *
      * <pre>
-     * double voltage = device.read(XY6008.VOUT);
+     * double voltage = device.read(Sinilink.VOUT);
      * </pre>
      *
      * @param reg the register descriptor containing address and scaling
@@ -112,7 +114,7 @@ public abstract class ModbusDevice {
     public int readInt(final DeviceRegister reg) throws Exception {
         return read(reg.address);
     }
-    
+
     /**
      * Writes a value to a device register using a {@link DeviceRegister} descriptor.
      *
@@ -126,7 +128,7 @@ public abstract class ModbusDevice {
      * </p>
      *
      * <pre>
-     * device.write(XY6008.VSET, 5.0);
+     * device.write(Sinilink.VSET, 5.0);
      * </pre>
      *
      * <p>
@@ -138,8 +140,34 @@ public abstract class ModbusDevice {
      * @param value the engineering value to write
      * @throws Exception if communication with the device fails
      */
-    public void write(final DeviceRegister reg, double value) throws Exception {
+    public void write(final DeviceRegister reg, final double value) throws Exception {
         write(reg.address, reg.encode(value));
+    }
+
+    /**
+     * Writes a value to a device register using a {@link DeviceRegister} descriptor and verify by reading a
+     * {@link DeviceRegister}.
+     * 
+     * @param regSet
+     * @param regVOut
+     * @param value
+     * @throws Exception
+     */
+    public void writeVerified(final DeviceRegister regSet, final DeviceRegister regOut, final double value) throws Exception {
+        System.out.println("\nSetting value → " + value + " " + regSet.unit);
+        for (int attempt = 1; attempt <= MAX_RETRY; attempt++) {
+            // writeRegister(XY6008Registers.REG_VSET, raw);
+            write(regSet, value);
+            Thread.sleep(200);
+            double readSet = read(regSet);
+            double readOut = read(regOut);
+            System.out.println(String.format("Attempt %d SET=%.2f%s OUT=%.2f%s", attempt, readSet, regSet.unit, readOut, regOut.unit));
+            if (readSet == value) {
+                System.out.println(regSet.name + " verified");
+                return;
+            }
+        }
+        throw new RuntimeException("Failed to set " + regSet.name);
     }
 
     /**
@@ -149,10 +177,10 @@ public abstract class ModbusDevice {
      * @param value the engineering value to write
      * @throws Exception if communication with the device fails
      */
-    public void writeInt(final DeviceRegister reg, int value) throws Exception {
+    public void writeInt(final DeviceRegister reg, final int value) throws Exception {
         write(reg, value);
     }
-    
+
     /**
      * Reads a raw Modbus register value.
      *

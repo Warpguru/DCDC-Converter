@@ -1,15 +1,17 @@
 package com.serial.device;
 
+import com.serial.devices.Riden;
+
 /**
- * Register map for XY6008 programmable DC power supply.
+ * Register map for {@code Sinilink} programmable DC power supply.
  *
  * <p>
- * The XY6008 exposes a smaller {@code Modbus} register map than the RD6030. It provides no information such as serial numbers,
+ * The Sinilink exposes a smaller {@code Modbus} register map than the {@link Riden} It provides no information such as serial numbers,
  * energy counters, CV/CC state, keypad lock, and battery mode registers.
  * </p>
  *
  * <p>
- * Scaling factors are typically identical to other XY6008 supplies:
+ * Scaling factors are typically identical to other Sinilink supplies:
  * </p>
  *
  * <ul>
@@ -18,12 +20,12 @@ package com.serial.device;
  * <li>Power values: raw / 100 = watts</li>
  * </ul>
  */
-public final class XY6008Registers {
+public final class SinilinkRegisters {
 
     /**
      * Constructor.
      */
-    private XY6008Registers() {
+    private SinilinkRegisters() {
     }
 
     /**
@@ -120,7 +122,7 @@ public final class XY6008Registers {
      *
      * Typical values: 10 – 100
      *
-     * Used to confirm that the attached serial device is an XY6008 compatible unit.
+     * Used to confirm that the attached serial device is an Sinilink compatible unit.
      */
     public static final int REG_FIRMWARE = 0x0005;
 
@@ -129,7 +131,7 @@ public final class XY6008Registers {
      *
      * Read only.
      *
-     * Alternative device identification register to confirm that the attached serial device is an XY6008 compatible unit.
+     * Alternative device identification register to confirm that the attached serial device is an Sinilink compatible unit.
      */
     public static final int REG_HARDWARE = 0x0006;
 
