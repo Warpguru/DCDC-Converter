@@ -221,47 +221,52 @@ public class SerialControllerApp {
      */
     @Deprecated
     private void demoVoltages(@Deprecated final String portName) throws Exception {
-        ModbusTransport transport = null;
-        //TODO: Sinilink defaults to 115200 Baud
-        //TODO: Riden defaults to 9600 Baud
-        try {
-            transport = new ModbusTransport(portName, ModbusConstants.BAUD_115200);
-//            transport = new ModbusTransport(portName, ModbusConstants.BAUD_9600);
-        } catch (Exception e) {
-            System.out.println("Usage: SerialControllerApp <port>");
-            System.out.println("       Port: " + portName + " invalid!");
-            return;
-        }
         DC2DCConverter dc2dcConverter = null;
+        ModbusTransport transport = null;
 
-        while (true) {
-            Sinilink sinilink = new Sinilink(transport, ModbusConstants.SLAVE_ADDRESS_1);
-            if (!sinilink.verifyDevicePresent()) {
-                System.out.println("No Sinilink detected on this port.");
-            } else {
-                dc2dcConverter = sinilink;
+        while (dc2dcConverter == null) {
+            // Sinilink defaults to 115200 Baud
+            try {
+                transport = new ModbusTransport(portName, ModbusConstants.BAUD_115200);
+                Sinilink sinilink = new Sinilink(transport, ModbusConstants.SLAVE_ADDRESS_1);
+                if (!sinilink.verifyDevicePresent()) {
+                    System.out.println("No Sinilink detected on this port.");
+                } else {
+                    dc2dcConverter = sinilink;
+                    break;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-            // TODO: Sinilink detection also works for Riden, requires improvement
-//            if (dc2dcConverter.getDevice() != null) {
-//                break;
-//            }
-            RidenRD50xx ridenRD50xx = new RidenRD50xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
-            if (!ridenRD50xx.verifyDevicePresent()) {
-                System.out.println("No RidenRD50xx detected on this port.");
-            } else {
-                dc2dcConverter = ridenRD50xx;
-            }
-            if (dc2dcConverter.getDevice() != null) {
-                break;
-            }
-            RidenRD60xx ridenRD60xx = new RidenRD60xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
-            if (!ridenRD60xx.verifyDevicePresent()) {
-                System.out.println("No RidenRD60xx detected on this port.");
-            } else {
-                dc2dcConverter = ridenRD60xx;
+            // Riden defaults to 9600 Baud
+            try {
+                transport = new ModbusTransport(portName, ModbusConstants.BAUD_9600);
+                while (true) {
+                    RidenRD50xx ridenRD50xx = new RidenRD50xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
+                    if (!ridenRD50xx.verifyDevicePresent()) {
+                        System.out.println("No RidenRD50xx detected on this port.");
+                    } else {
+                        dc2dcConverter = ridenRD50xx;
+                        break;
+                    }
+                    if (dc2dcConverter.getDevice() != null) {
+                        break;
+                    }
+                    RidenRD60xx ridenRD60xx = new RidenRD60xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
+                    if (!ridenRD60xx.verifyDevicePresent()) {
+                        System.out.println("No RidenRD60xx detected on this port.");
+                    } else {
+                        dc2dcConverter = ridenRD60xx;
+                        break;
+                    }
+                    break;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
             }
             break;
         }
+
         if (dc2dcConverter != null) {
             dc2dcConverter.setOutput(true);
             for (int i = 1; i <= 3; i++) {
@@ -280,6 +285,9 @@ public class SerialControllerApp {
                 power = dc2dcConverter.getPower();
                 System.out.println("V=" + voltage + " I=" + current + " P=" + power);
             }
+        } else {
+            System.out.println("Usage: SerialControllerApp <port>");
+            System.out.println("       Port: " + portName + " invalid!");
         }
         transport.close();
     }
