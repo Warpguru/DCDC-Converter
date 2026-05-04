@@ -163,7 +163,8 @@ public final class SinilinkRegisters {
      * writeRegister(REG_OUTPUT_ENABLE, 1);
      * </pre>
      */
-    public static final int REG_OUTPUT_ENABLE = 0x0008;
+    //TODO: does not work: public static final int REG_OUTPUT_ENABLE = 0x0008;
+    public static final int REG_OUTPUT_ENABLE = 0x0012;
 
     /**
      * Device protection state.
@@ -196,7 +197,7 @@ public final class SinilinkRegisters {
      */
     public static final int REG_TEMPERATURE_CELSIUS = 0x000A;
 
-    //TODO: This is at least partly incorrect, e.g. 0x0019 returns 6 which meansh 115200 Baud
+    //TODO: This IS partly incorrect (verified that switch output is 0x0012), e.g. 0x0019 returns 6 which meansh 115200 Baud
     //TODO: Probably XY6020 registers are compatible: https://github.com/creepystefan/esphome-XY6020/blob/main/doc/XY6020L-Modbus-Interface.pdf
     
     public static final int REG_MODEL = 0x0016;
