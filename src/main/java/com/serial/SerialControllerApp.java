@@ -222,9 +222,11 @@ public class SerialControllerApp {
     @Deprecated
     private void demoVoltages(@Deprecated final String portName) throws Exception {
         ModbusTransport transport = null;
+        //TODO: Sinilink defaults to 115200 Baud
+        //TODO: Riden defaults to 9600 Baud
         try {
-//            transport = new ModbusTransport(portName, ModbusConstants.BAUD_115200);
-            transport = new ModbusTransport(portName, ModbusConstants.BAUD_9600);
+            transport = new ModbusTransport(portName, ModbusConstants.BAUD_115200);
+//            transport = new ModbusTransport(portName, ModbusConstants.BAUD_9600);
         } catch (Exception e) {
             System.out.println("Usage: SerialControllerApp <port>");
             System.out.println("       Port: " + portName + " invalid!");
