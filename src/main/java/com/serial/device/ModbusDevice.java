@@ -64,6 +64,11 @@ public abstract class ModbusDevice {
     protected final byte slave;
 
     /**
+     * Device type as {@link String} retrieved via ModBus.
+     */
+    protected String device;
+    
+    /**
      * Creates a new Modbus device instance.
      *
      * @param transport the transport implementation used for Modbus communication
@@ -72,6 +77,18 @@ public abstract class ModbusDevice {
     public ModbusDevice(final ModbusTransport transport, final byte slave) {
         this.transport = transport;
         this.slave = slave;
+    }
+    
+    /**
+     * Retrieve device string.
+     * 
+     * @return
+     */
+    /**
+     * {@inheritDoc}
+     */
+    public String getDevice() {
+        return device;
     }
 
     /**

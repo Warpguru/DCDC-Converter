@@ -74,6 +74,7 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
             if (hardware >= 0 && hardware < 10000) {
                 System.out.println("Device detected via hardware register.");
                 devicePresent = true;
+                this.device = "Sinilink";
             }
         } catch (Exception e) {
             System.out.println("Hardware register read failed: " + e.getMessage());

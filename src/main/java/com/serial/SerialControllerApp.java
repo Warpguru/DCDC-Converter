@@ -51,7 +51,7 @@ public class SerialControllerApp {
 
     private void process(final String[] args) throws Exception {
         if (args.length == 0) {
-            System.out.println("Usage: XY6008TestTool <port>");
+            System.out.println("Usage: SerialController <port>");
             return;
         }
 
@@ -224,55 +224,64 @@ public class SerialControllerApp {
         ModbusTransport transport = null;
         try {
 //            transport = new ModbusTransport(portName, ModbusConstants.BAUD_115200);
-          transport = new ModbusTransport(portName, ModbusConstants.BAUD_9600);
+            transport = new ModbusTransport(portName, ModbusConstants.BAUD_9600);
         } catch (Exception e) {
             System.out.println("Usage: SerialControllerApp <port>");
             System.out.println("       Port: " + portName + " invalid!");
             return;
         }
         DC2DCConverter dc2dcConverter = null;
-        
-        Sinilink sinilink = new Sinilink(transport, ModbusConstants.SLAVE_ADDRESS_1);
-        if (!sinilink.verifyDevicePresent()) {
-            System.out.println("No Sinilink detected on this port.");
-        } else {
-            dc2dcConverter = sinilink;
-        }
-        RidenRD50xx ridenRD50xx = new RidenRD50xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
-        if (!ridenRD50xx.verifyDevicePresent()) {
-            System.out.println("No RidenRD50xx detected on this port.");
-        } else {
-            dc2dcConverter = ridenRD50xx;
-        }
-        RidenRD60xx ridenRD60xx = new RidenRD60xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
-        if (!ridenRD60xx.verifyDevicePresent()) {
-            System.out.println("No RidenRD60xx detected on this port.");
-        } else {
-            dc2dcConverter = ridenRD60xx;
-        }
-        if (dc2dcConverter == null) {
-            transport.close();
-            return;
-        }
-        for (int i = 1; i <= 3; i++) {
-            System.out.println("\n=== TEST CYCLE " + i + " ===");
-            dc2dcConverter.setVoltageVerified(5.0);
-            double voltage = dc2dcConverter.getVoltage();
-            double current = dc2dcConverter.getCurrent();
-            double power = dc2dcConverter.getPower();
-            System.out.println("V=" + voltage + " I=" + current + " P=" + power);
-            sleepSeconds(1);
 
-            dc2dcConverter.setVoltageVerified(3.3);
-            sleepSeconds(1);
-            voltage = dc2dcConverter.getVoltage();
-            current = dc2dcConverter.getCurrent();
-            power = dc2dcConverter.getPower();
-            System.out.println("V=" + voltage + " I=" + current + " P=" + power);
+        while (true) {
+            Sinilink sinilink = new Sinilink(transport, ModbusConstants.SLAVE_ADDRESS_1);
+            if (!sinilink.verifyDevicePresent()) {
+                System.out.println("No Sinilink detected on this port.");
+            } else {
+                dc2dcConverter = sinilink;
+            }
+            // TODO: Sinilink detection also works for Riden, requires improvement
+//            if (dc2dcConverter.getDevice() != null) {
+//                break;
+//            }
+            RidenRD50xx ridenRD50xx = new RidenRD50xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
+            if (!ridenRD50xx.verifyDevicePresent()) {
+                System.out.println("No RidenRD50xx detected on this port.");
+            } else {
+                dc2dcConverter = ridenRD50xx;
+            }
+            if (dc2dcConverter.getDevice() != null) {
+                break;
+            }
+            RidenRD60xx ridenRD60xx = new RidenRD60xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
+            if (!ridenRD60xx.verifyDevicePresent()) {
+                System.out.println("No RidenRD60xx detected on this port.");
+            } else {
+                dc2dcConverter = ridenRD60xx;
+            }
+            break;
+        }
+        if (dc2dcConverter != null) {
+            dc2dcConverter.setOutput(true);
+            for (int i = 1; i <= 3; i++) {
+                System.out.println("\n=== TEST CYCLE " + i + " ===");
+                dc2dcConverter.setVoltageVerified(5.0);
+                double voltage = dc2dcConverter.getVoltage();
+                double current = dc2dcConverter.getCurrent();
+                double power = dc2dcConverter.getPower();
+                System.out.println("V=" + voltage + " I=" + current + " P=" + power);
+                sleepSeconds(1);
+
+                dc2dcConverter.setVoltageVerified(3.3);
+                sleepSeconds(1);
+                voltage = dc2dcConverter.getVoltage();
+                current = dc2dcConverter.getCurrent();
+                power = dc2dcConverter.getPower();
+                System.out.println("V=" + voltage + " I=" + current + " P=" + power);
+            }
         }
         transport.close();
     }
-   
+
     /**
      * Returns the given value if it is non-null and non-empty, otherwise "N/A".
      *

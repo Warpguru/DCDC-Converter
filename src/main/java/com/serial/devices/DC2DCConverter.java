@@ -6,6 +6,13 @@ package com.serial.devices;
 public interface DC2DCConverter {
 
     /**
+     * Retrieve {@code DC/DC Converter} device as {@link String}.
+     * 
+     * @return device
+     */
+    public abstract String getDevice();
+    
+    /**
      * Set output voltage verified.
      * 
      * @param volts

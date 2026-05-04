@@ -101,6 +101,7 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
             if (deviceId >= 0 && deviceId < 10000) {
                 System.out.println("Device detected via hardware register.");
                 devicePresent = true;
+                this.device = String.format("Riden RD%04d", deviceId);
             }
         } catch (Exception e) {
             System.out.println("Hardware register read failed: " + e.getMessage());
