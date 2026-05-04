@@ -44,6 +44,10 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
     public static final DeviceRegister TEMP_CELSIUS = new DeviceRegister("Temperature Celsius", "°C",
             SinilinkRegisters.REG_TEMPERATURE_CELSIUS);
 
+    public static final DeviceRegister MODEL = new DeviceRegister("Model", null, SinilinkRegisters.REG_MODEL);
+    public static final DeviceRegister VERSION = new DeviceRegister("Model", null, SinilinkRegisters.REG_VERSION);
+
+    
     public Sinilink(final ModbusTransport transport, final byte slave) {
         super(transport, slave);
     }
@@ -58,20 +62,25 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
         boolean devicePresent = false;
         // Try firmware register
         try {
-            int firmware = getFirmwareVersion();
+            // int firmware = getFirmwareVersion();
+            int firmware = getVersion();
             System.out.println("Firmware version register read: " + firmware);
-            if (firmware >= 0 && firmware < 10000) {
+            if (firmware > 0 && firmware < 10000) {
                 System.out.println("Device detected via firmware register.");
                 devicePresent = true;
+                if (firmware == 1234) {
+                    this.device = "Sinilink XY6008";
+                }
             }
         } catch (Exception e) {
             System.out.println("Firmware register read failed: " + e.getMessage());
         }
         // Try hardware register
         try {
-            int hardware = getHardwareVersion();
+            // int hardware = getHardwareVersion();
+            int hardware = getModel();
             System.out.println("Hardware version register read: " + hardware);
-            if (hardware >= 0 && hardware < 10000) {
+            if (hardware > 0 && hardware < 10000) {
                 System.out.println("Device detected via hardware register.");
                 devicePresent = true;
                 this.device = "Sinilink";
@@ -167,4 +176,12 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
         return readInt(HARDWARE_VERSION);
     }
 
+    public int getModel() throws Exception {
+        return readInt(MODEL);
+    }
+    
+    public int getVersion() throws Exception {
+        return readInt(VERSION);
+    }
+    
 }
