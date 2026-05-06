@@ -87,4 +87,18 @@ public final class ModbusFunctionCodes {
      */
     public static final byte WRITE_SINGLE_REGISTER = 0x06;
 
+    
+    /**
+     * Modbus function code for writing multiple registers.
+     *
+     * <p>
+     * Command: 0x10
+     * </p>
+     *
+     * <p>
+     * This command writes 16-bit values to a number of subsequent registers.
+     * </p>
+     */
+    public static final byte WRITE_MULTIPLE_REGISTERS = 0x10;
+    
 }
