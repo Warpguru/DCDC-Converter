@@ -1,5 +1,6 @@
 package com.serial;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,8 +36,14 @@ public class SerialControllerApp {
 
     private static final Logger logger = LoggerFactory.getLogger(SerialControllerApp.class);
 
-    // Keep track of connected clients to broadcast updates
+    /** Baud rates descending from fastest to slowest. */
+    private static final List<Integer> BAUDS = List.of(ModbusConstants.BAUD_115200, ModbusConstants.BAUD_57600,
+            ModbusConstants.BAUD_38400, ModbusConstants.BAUD_19200, ModbusConstants.BAUD_9600);
+
+    /** Keep track of connected clients to broadcast updates. */
     private static final Set<io.javalin.websocket.WsContext> clients = ConcurrentHashMap.newKeySet();
+
+    /** JSON mapping. */
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     /** Current setting in amperes, adjustable via the GUI (0.00 – 2.00 A). */
@@ -226,48 +233,55 @@ public class SerialControllerApp {
 
         while (dc2dcConverter == null) {
             // Sinilink defaults to 115200 Baud
-            try {
-                transport = new ModbusTransport(portName, ModbusConstants.BAUD_115200);
-                Sinilink sinilink = new Sinilink(transport, ModbusConstants.SLAVE_ADDRESS_1);
-                if (!sinilink.verifyDevicePresent()) {
-                    System.out.println("No Sinilink detected on this port.");
-                } else {
-                    dc2dcConverter = sinilink;
-                    break;
+            for (final Integer baud : BAUDS) {
+                try {
+                    transport = new ModbusTransport(portName, baud);
+                    Sinilink sinilink = new Sinilink(transport, ModbusConstants.SLAVE_ADDRESS_1);
+                    if (!sinilink.verifyDevicePresent()) {
+                        System.out.println("No Sinilink detected on this port.");
+                    } else {
+                        dc2dcConverter = sinilink;
+                        break;
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    transport.close();
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
             }
             // Riden defaults to 9600 Baud
-            try {
-                transport = new ModbusTransport(portName, ModbusConstants.BAUD_9600);
-                while (true) {
-                    RidenRD50xx ridenRD50xx = new RidenRD50xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
-                    if (!ridenRD50xx.verifyDevicePresent()) {
-                        System.out.println("No RidenRD50xx detected on this port.");
-                    } else {
-                        dc2dcConverter = ridenRD50xx;
+            final List<Integer> baudSlowToFast = BAUDS.reversed();
+            for (final Integer baud : baudSlowToFast) {
+                try {
+                    transport = new ModbusTransport(portName, baud);
+                    while (true) {
+                        RidenRD50xx ridenRD50xx = new RidenRD50xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
+                        if (!ridenRD50xx.verifyDevicePresent()) {
+                            System.out.println("No RidenRD50xx detected on this port.");
+                        } else {
+                            dc2dcConverter = ridenRD50xx;
+                            break;
+                        }
+                        if (dc2dcConverter.getDevice() != null) {
+                            break;
+                        }
+                        RidenRD60xx ridenRD60xx = new RidenRD60xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
+                        if (!ridenRD60xx.verifyDevicePresent()) {
+                            System.out.println("No RidenRD60xx detected on this port.");
+                        } else {
+                            dc2dcConverter = ridenRD60xx;
+                            break;
+                        }
                         break;
                     }
-                    if (dc2dcConverter.getDevice() != null) {
-                        break;
-                    }
-                    RidenRD60xx ridenRD60xx = new RidenRD60xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
-                    if (!ridenRD60xx.verifyDevicePresent()) {
-                        System.out.println("No RidenRD60xx detected on this port.");
-                    } else {
-                        dc2dcConverter = ridenRD60xx;
-                        break;
-                    }
-                    break;
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    transport.close();
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
             }
             break;
         }
-
         if (dc2dcConverter != null) {
+            // Enable output
             dc2dcConverter.setOutput(true);
             for (int i = 1; i <= 3; i++) {
                 System.out.println("\n=== TEST CYCLE " + i + " ===");
@@ -285,11 +299,11 @@ public class SerialControllerApp {
                 power = dc2dcConverter.getPower();
                 System.out.println("V=" + voltage + " I=" + current + " P=" + power);
             }
+            transport.close();
         } else {
             System.out.println("Usage: SerialControllerApp <port>");
             System.out.println("       Port: " + portName + " invalid!");
         }
-        transport.close();
     }
 
     /**

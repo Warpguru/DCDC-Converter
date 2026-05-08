@@ -8,8 +8,20 @@ public final class ModbusConstants {
     private ModbusConstants() {
     }
 
+    /** Default data bits by {@code Modbus} device. */
+    public static final int DATABITS_8 = 8;
+    
     /** Default baud rate used by {@code Modbus} device. */
     public static final int BAUD_9600 = 9600;
+
+    /** Non default baud rate used by {@code Modbus} device. */
+    public static final int BAUD_19200 = 19200;
+    
+    /** Non default baud rate used by {@code Modbus} device. */
+    public static final int BAUD_38400 = 38400;
+    
+    /** Non default baud rate used by {@code Modbus} device. */
+    public static final int BAUD_57600 = 57600;
     
     /** Default baud rate used by {@code Modbus} device. */
     public static final int BAUD_115200 = 115200;
@@ -17,14 +29,10 @@ public final class ModbusConstants {
     /** Default slave address used by {@code Modbus} device. */
     public static final byte SLAVE_ADDRESS_1 = 0x01;
 
-    //TODO: Delete me
-//    /** {@code Modbus} device function code: read holding registers. */
-//    public static final byte READ_HOLDING_REGISTERS = 0x03;
-//
-//    /** {@code Modbus} device function code: write single register. */
-//    public static final byte WRITE_SINGLE_REGISTER = 0x06;
-//    
-//    /** {@code Modbus} device function code: write multiple registers. */
-//    public static final byte WRITE_MULTIPLE_REGISTER = 0x10;
+    /** Read timeout [ms]. */
+    public static final int READ_TIMEOUT_MS = 1000;
+    
+    /** Write timeout [ms]. */
+    public static final int WRITE_TIMEOUT_MS = 0;
     
 }

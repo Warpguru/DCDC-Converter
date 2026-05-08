@@ -28,8 +28,9 @@ public class ModbusTransport {
      */
     public ModbusTransport(final String portName, final int baud) throws Exception {
         port = SerialPort.getCommPort(portName);
-        port.setComPortParameters(baud, 8, SerialPort.ONE_STOP_BIT, SerialPort.NO_PARITY);
-        port.setComPortTimeouts(SerialPort.TIMEOUT_READ_BLOCKING, 1000, 0);
+        port.setComPortParameters(baud, ModbusConstants.DATABITS_8, SerialPort.ONE_STOP_BIT, SerialPort.NO_PARITY);
+        port.setComPortTimeouts(SerialPort.TIMEOUT_READ_BLOCKING, ModbusConstants.READ_TIMEOUT_MS,
+                ModbusConstants.WRITE_TIMEOUT_MS);
         if (!port.openPort())
             throw new RuntimeException("Cannot open serial port");
         in = port.getInputStream();
@@ -174,7 +175,7 @@ public class ModbusTransport {
         frame[6] = (byte) crc;
         frame[7] = (byte) (crc >> 8);
         log("TX", frame);
-        
+
         out.write(frame);
         out.flush();
         byte[] resp = readBytes(8);
