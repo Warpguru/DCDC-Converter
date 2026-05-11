@@ -41,8 +41,14 @@ import com.serial.modbus.ModbusTransport;
  */
 public abstract class ModbusDevice {
 
+    /** Retry counter. */
     protected static final int MAX_RETRY = 3;
 
+    /**
+     * {@code SerialPort} device name used with Modbus protocol.
+     */
+    protected String portName;
+    
     /**
      * Transport layer used for Modbus communication.
      *
@@ -51,7 +57,7 @@ public abstract class ModbusDevice {
      * serial port using Modbus RTU).
      * </p>
      */
-    protected final ModbusTransport transport;
+    protected ModbusTransport transport;
 
     /**
      * Modbus slave address of the device.
@@ -64,6 +70,11 @@ public abstract class ModbusDevice {
     protected final byte slave;
 
     /**
+     * Device manufacturer as {@link String} retrieved via ModBus.
+     */
+    protected String manufacturer;
+    
+    /**
      * Device type as {@link String} retrieved via ModBus.
      */
     protected String device;
@@ -71,12 +82,39 @@ public abstract class ModbusDevice {
     /**
      * Creates a new Modbus device instance.
      *
-     * @param transport the transport implementation used for Modbus communication
+     * @param portName  of {@code SerialPort} used with Modbus protocol
      * @param slave     the Modbus slave address of the device
      */
-    public ModbusDevice(final ModbusTransport transport, final byte slave) {
-        this.transport = transport;
+    public ModbusDevice(final String portName, final byte slave) {
+        this.portName = portName;
         this.slave = slave;
+    }
+    
+    /**
+     * Retrieve {@code SerialPort} device name used with Modbus protocol.
+     * 
+     * @return {@code portName}
+     */
+    public String getPortName() {
+        return portName;
+    }
+    
+    /**
+     * Check if a known {@code Modbus} device was found on {@code SerialPort}.
+     * 
+     * @return {@code true} or {@code false}
+     */
+    public boolean isDeviceDetected() {
+        return ((manufacturer != null) && (device != null));
+    }
+    
+    /**
+     * Retrieve manufacturer string.
+     * 
+     * @return manufacturer
+     */
+    public String getManufacturer() {
+        return manufacturer;
     }
     
     /**

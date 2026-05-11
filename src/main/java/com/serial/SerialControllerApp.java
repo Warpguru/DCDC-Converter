@@ -1,6 +1,5 @@
 package com.serial;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -11,11 +10,8 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fazecast.jSerialComm.SerialPort;
 import com.serial.devices.DC2DCConverter;
-import com.serial.devices.RidenRD50xx;
-import com.serial.devices.RidenRD60xx;
 import com.serial.devices.Sinilink;
 import com.serial.modbus.ModbusConstants;
-import com.serial.modbus.ModbusTransport;
 
 import io.javalin.Javalin;
 import io.javalin.http.Context;
@@ -35,10 +31,6 @@ import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
 public class SerialControllerApp {
 
     private static final Logger logger = LoggerFactory.getLogger(SerialControllerApp.class);
-
-    /** Baud rates descending from fastest to slowest. */
-    private static final List<Integer> BAUDS = List.of(ModbusConstants.BAUD_115200, ModbusConstants.BAUD_57600,
-            ModbusConstants.BAUD_38400, ModbusConstants.BAUD_19200, ModbusConstants.BAUD_9600);
 
     /** Keep track of connected clients to broadcast updates. */
     private static final Set<io.javalin.websocket.WsContext> clients = ConcurrentHashMap.newKeySet();
@@ -86,6 +78,8 @@ public class SerialControllerApp {
             config.staticFiles.add("/public", Location.CLASSPATH);
             // Server HTTP GET /init
             config.routes.get("/init", this::init);
+            // Server HTTP POST /quit
+            config.routes.get("/quit", this::quit);
 
             // WebSocket endpoint for live data
             config.routes.ws("/ws/data", ws -> {
@@ -177,7 +171,7 @@ public class SerialControllerApp {
     @OpenApi(
             path = "/init",
             methods = HttpMethod.GET,
-            summary = "Get all users",
+            summary = "Get ...",
             responses = {
                 @OpenApiResponse(status = "200", content = @OpenApiContent(from = String.class))
             }
@@ -187,6 +181,10 @@ public class SerialControllerApp {
         ctx.result("Abracadabra");
     }
 
+    public void quit(final Context ctx) {
+        ctx.result("Qutting ...");
+    }
+    
     private void sleepSeconds(final int seconds) throws Exception {
         System.out.println("Waiting " + seconds + " seconds...");
         Thread.sleep(seconds * 1000);
@@ -229,57 +227,15 @@ public class SerialControllerApp {
     @Deprecated
     private void demoVoltages(@Deprecated final String portName) throws Exception {
         DC2DCConverter dc2dcConverter = null;
-        ModbusTransport transport = null;
+        Sinilink sinilink = new Sinilink(portName, ModbusConstants.SLAVE_ADDRESS_1);
+        dc2dcConverter = sinilink.verifyDevicePresent();
+        
+//        RidenRD50xx ridenRD50xx = new RidenRD50xx(portName, ModbusConstants.SLAVE_ADDRESS_1);
+//        dc2dcConverter = ridenRD50xx.verifyDevicePresent();
 
-        while (dc2dcConverter == null) {
-            // Sinilink defaults to 115200 Baud
-            for (final Integer baud : BAUDS) {
-                try {
-                    transport = new ModbusTransport(portName, baud);
-                    Sinilink sinilink = new Sinilink(transport, ModbusConstants.SLAVE_ADDRESS_1);
-                    if (!sinilink.verifyDevicePresent()) {
-                        System.out.println("No Sinilink detected on this port.");
-                    } else {
-                        dc2dcConverter = sinilink;
-                        break;
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    transport.close();
-                }
-            }
-            // Riden defaults to 9600 Baud
-            final List<Integer> baudSlowToFast = BAUDS.reversed();
-            for (final Integer baud : baudSlowToFast) {
-                try {
-                    transport = new ModbusTransport(portName, baud);
-                    while (true) {
-                        RidenRD50xx ridenRD50xx = new RidenRD50xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
-                        if (!ridenRD50xx.verifyDevicePresent()) {
-                            System.out.println("No RidenRD50xx detected on this port.");
-                        } else {
-                            dc2dcConverter = ridenRD50xx;
-                            break;
-                        }
-                        if (dc2dcConverter.getDevice() != null) {
-                            break;
-                        }
-                        RidenRD60xx ridenRD60xx = new RidenRD60xx(transport, ModbusConstants.SLAVE_ADDRESS_1);
-                        if (!ridenRD60xx.verifyDevicePresent()) {
-                            System.out.println("No RidenRD60xx detected on this port.");
-                        } else {
-                            dc2dcConverter = ridenRD60xx;
-                            break;
-                        }
-                        break;
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    transport.close();
-                }
-            }
-            break;
-        }
+//        RidenRD60xx ridenRD60xx = new RidenRD60xx(portName, ModbusConstants.SLAVE_ADDRESS_1);
+//        dc2dcConverter = ridenRD60xx.verifyDevicePresent();
+        
         if (dc2dcConverter != null) {
             // Enable output
             dc2dcConverter.setOutput(true);
@@ -299,7 +255,6 @@ public class SerialControllerApp {
                 power = dc2dcConverter.getPower();
                 System.out.println("V=" + voltage + " I=" + current + " P=" + power);
             }
-            transport.close();
         } else {
             System.out.println("Usage: SerialControllerApp <port>");
             System.out.println("       Port: " + portName + " invalid!");

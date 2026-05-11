@@ -30,8 +30,7 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
     public static final DeviceRegister FIRMWARE_VERSION = new DeviceRegister("Firmware Version", null,
             SinilinkRegisters.REG_FIRMWARE);
 
-    public static final DeviceRegister MODEL_VERSION = new DeviceRegister("Model Version", null,
-            SinilinkRegisters.REG_MODEL);
+    public static final DeviceRegister MODEL_VERSION = new DeviceRegister("Model Version", null, SinilinkRegisters.REG_MODEL);
 
     public static final DeviceRegister VIN = new DeviceRegister("Voltage Input", "V", SinilinkRegisters.REG_VIN);
 
@@ -44,50 +43,75 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
     public static final DeviceRegister TEMP_CELSIUS = new DeviceRegister("Internal temperature Celsius", "°C",
             SinilinkRegisters.REG_TEMPERATURE_INTERNAL, 10);
 
-    public Sinilink(final ModbusTransport transport, final byte slave) {
-        super(transport, slave);
+    /**
+     * Constructor.
+     * 
+     * @param portName of {@code SerialPort} used with Modbus protocol
+     * @param slave    port to use
+     */
+    public Sinilink(final String portName, final byte slave) {
+        super(portName, slave);
     }
 
     /**
      * Verify that {@code Sinilink} is present.
      * 
-     * @return true or false
+     * @return {@link Sinilink} instance or {@code Null}
      */
-    public boolean verifyDevicePresent() {
+    public DC2DCConverter verifyDevicePresent() {
         System.out.println("Checking for Sinilink device...");
-        boolean devicePresent = false;
-        // Try firmware register
-        try {
-            int firmwareVersion = getFirmwareVersion();
-            System.out.println("Firmware version register read: " + firmwareVersion);
-            if (firmwareVersion > 0 && firmwareVersion < 10000) {
-                System.out.println("Device detected via firmware version register.");
-                devicePresent = true;
-                if (firmwareVersion == 1234) {
-                    this.device = "Sinilink XY6008";
+        // Sinilink defaults to 115200 Baud
+        for (final Integer baud : ModbusTransport.BAUDS) {
+            try {
+                // Initialize with current Baud rate
+                transport = new ModbusTransport(portName, baud);
+                // Try firmware register
+                try {
+                    int firmwareVersion = getFirmwareVersion();
+                    System.out.println("Firmware version register read: " + firmwareVersion);
+                    if (firmwareVersion > 0 && firmwareVersion < 65535) {
+                        System.out.println("Device detected via firmware version register.");
+                        if (firmwareVersion == 110) {
+                            this.manufacturer = "Sinilink";
+                            this.device = "XY6008";
+                        }
+                    }
+                } catch (Exception e) {
+                    // Probably wrong Baud rate
+                    // System.out.println("Firmware version register read failed: " + e.getMessage());
                 }
+                // Try hardware register
+                try {
+                    int modelVersion = getModelVersion();
+                    System.out.println("Model version register read: " + modelVersion);
+                    if (modelVersion > 0 && modelVersion < 65535) {
+                        System.out.println("Device detected via model version register.");
+                        if (modelVersion == 22802) {
+                            this.manufacturer = "Sinilink";
+                            this.device = "XY6008";
+                        }
+                    }
+                } catch (Exception e) {
+                    // Probably wrong Baud rate
+                    // System.out.println("Model version register read failed: " + e.getMessage());
+                }
+                if (!isDeviceDetected()) {
+                    // Probably still wrong Baud rate, retry with next Baud rate
+                    transport.close();
+                } else {
+                    // Device detected
+                    break;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                transport.close();
             }
-        } catch (Exception e) {
-            System.out.println("Firmware version register read failed: " + e.getMessage());
         }
-        // Try hardware register
-        try {
-            int modelVersion = getModelVersion();
-            System.out.println("Model version register read: " + modelVersion);
-            if (modelVersion > 0 && modelVersion < 10000) {
-                System.out.println("Device detected via model version register.");
-                devicePresent = true;
-                this.device = "Sinilink";
-            }
-        } catch (Exception e) {
-            System.out.println("Model version register read failed: " + e.getMessage());
-        }
-        if (devicePresent == false) {
+        // Check for detected device
+        if (!isDeviceDetected()) {
             System.out.println("No Sinilink detected.");
-        } else {
-            // Device detected
         }
-        return devicePresent;
+        return this;
     }
 
     /**
@@ -173,5 +197,5 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
     public int getModelVersion() throws Exception {
         return readInt(MODEL_VERSION);
     }
-    
+
 }
