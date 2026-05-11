@@ -9,19 +9,21 @@ import com.serial.modbus.ModbusTransport;
  * {@code RidenRD60xx} (e.g. {@code RD6030}) {@code Modbus} to {@code TTL} 3.3V {@code serial} connection.
  * 
  * <ul>
- * <li>RidenRD60xx Black:  → Gnd
- * <li>RidenRD60xx ?:  → TxD
+ * <li>RidenRD60xx Black: → Gnd
+ * <li>RidenRD60xx ?: → TxD
  * <li>RidenRD60xx ?: → RxD
- * <li>RidenRD60xx Red:    → NC (5V)
+ * <li>RidenRD60xx Red: → NC (5V)
  * </ul>
  */
 public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
 
-    public static final DeviceRegister DEVICE_ID = new DeviceRegister("Model Identification", null, RidenRegistersRD60xx.REG_DEVICE_ID);
+    public static final DeviceRegister DEVICE_ID = new DeviceRegister("Model Identification", null,
+            RidenRegistersRD60xx.REG_DEVICE_ID);
 
-    public static final DeviceRegister FIRMWARE_VERSION = new DeviceRegister("Firmware Version", null, RidenRegistersRD60xx.REG_FIRMWARE, 100);
+    public static final DeviceRegister FIRMWARE_VERSION = new DeviceRegister("Firmware Version", null,
+            RidenRegistersRD60xx.REG_FIRMWARE, 100);
 
-    public static final DeviceRegister TEMP_SIGN_CELSIUS = new DeviceRegister("Temperature Sign", null, 
+    public static final DeviceRegister TEMP_SIGN_CELSIUS = new DeviceRegister("Temperature Sign", null,
             RidenRegistersRD60xx.REG_TEMP_SIGN_CELSIUS);
 
     public static final DeviceRegister TEMP_CELSIUS = new DeviceRegister("Temperature Celsius", "°C",
@@ -54,60 +56,88 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
 
     public static final DeviceRegister MODE = new DeviceRegister("CC/CV Mode", null, RidenRegistersRD60xx.REG_MODE);
 
-    public static final DeviceRegister OUTPUT_ENABLE = new DeviceRegister("Output Enable", null, RidenRegistersRD60xx.REG_OUTPUT_ENABLE);
+    public static final DeviceRegister OUTPUT_ENABLE = new DeviceRegister("Output Enable", null,
+            RidenRegistersRD60xx.REG_OUTPUT_ENABLE);
 
     public static final DeviceRegister PRESET = new DeviceRegister("Preset Selector", "Mx", RidenRegistersRD60xx.REG_PRESET);
 
-    public static final DeviceRegister IRANGE = new DeviceRegister("Current Range", "A", RidenRegistersRD60xx.REG_CURRENT_RANGE);
+    public static final DeviceRegister IRANGE = new DeviceRegister("Current Range", "A",
+            RidenRegistersRD60xx.REG_CURRENT_RANGE);
 
-    public RidenRD60xx(ModbusTransport transport, byte slave) {
-        super(transport, slave);
+    /**
+     * Constructor.
+     * 
+     * @param portName of {@code SerialPort} used with Modbus protocol
+     * @param slave    port to use
+     */
+    public RidenRD60xx(final String portName, final byte slave) {
+        super(portName, slave);
     }
 
     /**
-     * Verify that {@code RidenRD60xx} is present.
+     * Verify that {@code Riden RD60xx} is present.
      * 
-     * @return true or false
+     * @return {@link Riden} instance or {@code Null}
      */
-    public boolean verifyDevicePresent() {
-        System.out.println("Checking for RidenRD60xx device...");
-        boolean devicePresent = false;
-        // Try firmware register
-        try {
-            int firmware = getFirmwareVersion();
-            System.out.println("Firmware version register read: " + firmware);
-            if (firmware >= 0 && firmware < 10000) {
-                System.out.println("Device detected via firmware register.");
-                devicePresent = true;
+    public DC2DCConverter verifyDevicePresent() {
+        System.out.println("Checking for Riden RD60xx device...");
+        // Riden defaults to 9600 Baud
+        for (final Integer baud : ModbusTransport.BAUDS) {
+            try {
+                // Initialize with current Baud rate
+                transport = new ModbusTransport(portName, baud);
+                // Try firmware register
+                try {
+                    int firmwareVersion = getFirmwareVersion();
+                    System.out.println("Firmware version register read: " + firmwareVersion);
+                    if (firmwareVersion > 0 && firmwareVersion < 65535) {
+                        System.out.println("Device detected via firmware version register.");
+                        if (firmwareVersion == 110) {
+                            this.manufacturer = "Riden";
+                            this.device = "RD6020";
+                        }
+                    }
+                } catch (Exception e) {
+                    // Probably wrong Baud rate
+                    // System.out.println("Firmware version register read failed: " + e.getMessage());
+                }
+                // Try device id register
+                try {
+                    int deviceId = getDeviceId();
+                    System.out.println("Device Id register read: " + deviceId);
+                    if (deviceId >= 0 && deviceId < 10000) {
+                        System.out.println("Device detected via device Id register.");
+                        this.manufacturer = "Riden";
+                        this.device = String.format("RD%04d", deviceId);
+                    }
+                } catch (Exception e) {
+                    // Probably wrong Baud rate
+                    // System.out.println("Model version register read failed: " + e.getMessage());
+                }
+                if (!isDeviceDetected()) {
+                    // Probably still wrong Baud rate, retry with next Baud rate
+                    transport.close();
+                } else {
+                    // Device detected
+                    break;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                transport.close();
             }
-        } catch (Exception e) {
-            System.out.println("Firmware register read failed: " + e.getMessage());
         }
-        // Try device Id
-        try {
-            int deviceId = getDeviceId();
-            System.out.println("Device Id register read: " + deviceId);
-            if (deviceId >= 0 && deviceId < 10000) {
-                System.out.println("Device detected via hardware register.");
-                devicePresent = true;
-                this.device = String.format("Riden RD%04d", deviceId);
-            }
-        } catch (Exception e) {
-            System.out.println("Hardware register read failed: " + e.getMessage());
+        // Check for detected device
+        if (!isDeviceDetected()) {
+            System.out.println("No Riden RD60xx detected.");
         }
-        if (devicePresent == false) {
-            System.out.println("No RidenRD60xx detected.");
-        } else {
-            // Device detected
-        }
-        return devicePresent;
+        return this;
     }
 
     @Override
     public void setVoltageVerified(final double volts) throws Exception {
         writeVerified(VSET, VOUT, volts);
     }
-    
+
     @Override
     public void setVoltage(final double volts) throws Exception {
         write(VSET, volts);
@@ -122,7 +152,7 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
     public void setCurrentVerified(final double amperes) throws Exception {
         writeVerified(ISET, IOUT, amperes);
     }
-    
+
     @Override
     public void setCurrent(final double amperes) throws Exception {
         write(ISET, amperes);

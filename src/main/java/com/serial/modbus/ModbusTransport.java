@@ -2,6 +2,7 @@ package com.serial.modbus;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.List;
 
 import com.fazecast.jSerialComm.SerialPort;
 
@@ -10,6 +11,13 @@ import com.fazecast.jSerialComm.SerialPort;
  */
 public class ModbusTransport {
 
+    /** Baud rates descending from fastest to slowest. */
+    public static final List<Integer> BAUDS = List.of(ModbusConstants.BAUD_115200, ModbusConstants.BAUD_57600,
+            ModbusConstants.BAUD_38400, ModbusConstants.BAUD_19200, ModbusConstants.BAUD_9600);
+
+    /** {@link SerialPort} device name the {@code Modbus} device is connected to. */
+    private final String portName;
+    
     /** {@link SerialPort} the {@code Modbus} device is connected to. */
     private final SerialPort port;
 
@@ -27,6 +35,7 @@ public class ModbusTransport {
      * @throws Exception
      */
     public ModbusTransport(final String portName, final int baud) throws Exception {
+        this.portName = portName;
         port = SerialPort.getCommPort(portName);
         port.setComPortParameters(baud, ModbusConstants.DATABITS_8, SerialPort.ONE_STOP_BIT, SerialPort.NO_PARITY);
         port.setComPortTimeouts(SerialPort.TIMEOUT_READ_BLOCKING, ModbusConstants.READ_TIMEOUT_MS,
@@ -37,6 +46,15 @@ public class ModbusTransport {
         out = port.getOutputStream();
     }
 
+    /**
+     * Retrieve {@link SerialPort} device name the {@code Modbus} device is connected to.
+     * 
+     * @return {@code portName}
+     */
+    public String getPortName() {
+        return portName;
+    }
+    
     /**
      * Close port connected to {@code Modbus} device.
      */
