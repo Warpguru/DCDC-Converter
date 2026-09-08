@@ -16,12 +16,17 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
+        <main.class>com.serial.SerialControllerApp</main.class>
+        <!-- Dependencies versions -->
         <jserialcomm.version>2.11.4</jserialcomm.version>
         <slf4j.version>2.0.17</slf4j.version>
         <log4j.version>2.25.3</log4j.version>
-        <javalin.version>7.1.0</javalin.version>
-        <jackson.databind.version>2.21.1</jackson.databind.version>
-        <main.class>com.serial.SerialControllerApp</main.class>
+        <javalin.version>7.2.3</javalin.version>
+        <jackson.databind.version>2.22.2</jackson.databind.version>
+        <!-- Build plugin versions -->
+        <maven.compiler.plugin.version>3.16.0</maven.compiler.plugin.version>
+        <maven.jar.plugin.version>3.5.1</maven.jar.plugin.version>
+        <maven.shade.plugin.version>3.6.2</maven.shade.plugin.version>
     </properties>
 
     <dependencies>
@@ -70,13 +75,13 @@
 		<dependency>
 		    <groupId>io.javalin.community.openapi</groupId>
 		    <artifactId>javalin-swagger-plugin</artifactId>
-		    <version>7.0.1</version>
+		    <version>${javalin.version}</version>
 		</dependency>
 		<!-- Source: https://mvnrepository.com/artifact/io.javalin.community.openapi/javalin-openapi-plugin -->
 		<dependency>
 		    <groupId>io.javalin.community.openapi</groupId>
 		    <artifactId>javalin-openapi-plugin</artifactId>
-		    <version>7.0.1</version>
+		    <version>${javalin.version}</version>
 		    <scope>compile</scope>
 		</dependency>
 
@@ -89,17 +94,17 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
+                <version>${maven.compiler.plugin.version}</version>
                 <configuration>
                     <source>${maven.compiler.source}</source>
                     <target>${maven.compiler.target}</target>
-			        <annotationProcessorPaths>
-			            <path>
-			                <groupId>io.javalin.community.openapi</groupId>
-			                <artifactId>openapi-annotation-processor</artifactId>
-			                <version>7.0.1</version>
-			            </path>
-			        </annotationProcessorPaths>
+          <annotationProcessorPaths>
+              <path>
+                  <groupId>io.javalin.community.openapi</groupId>
+                  <artifactId>openapi-annotation-processor</artifactId>
+                  <version>${javalin.version}</version>
+              </path>
+          </annotationProcessorPaths>
                 </configuration>
             </plugin>
 
@@ -107,7 +112,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
-                <version>3.4.2</version>
+                <version>${maven.jar.plugin.version}</version>
                 <configuration>
                     <archive>
                         <manifest>
@@ -121,7 +126,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>${maven.shade.plugin.version}</version>
                 <executions>
                     <execution>
                         <phase>package</phase>

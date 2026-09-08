@@ -4,12 +4,18 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fazecast.jSerialComm.SerialPort;
+import com.serial.device.DeviceRegister;
 
 /**
  * Handles low-level Modbus RTU communication over serial.
  */
 public class ModbusTransport {
+
+    private static final Logger logger = LoggerFactory.getLogger(ModbusTransport.class);
 
     /** Baud rates descending from fastest to slowest. */
     public static final List<Integer> BAUDS = List.of(ModbusConstants.BAUD_115200, ModbusConstants.BAUD_57600,
@@ -111,21 +117,21 @@ public class ModbusTransport {
      */
     public int readRegister(final byte slave, final int reg) throws Exception {
         byte[] frame = new byte[8];
-        frame[0] = slave; // ModbusConstants.SLAVE_ADDRESS_1;
+        frame[0] = slave;
         frame[1] = ModbusFunctionCodes.READ_HOLDING_REGISTERS;
         frame[2] = (byte) (reg >> 8);
         frame[3] = (byte) reg;
         frame[4] = 0;
-        frame[5] = 1; // Read 1 register
+        frame[5] = 1;
         int crc = ModbusCRC.calculate(frame, 6);
         frame[6] = (byte) crc;
         frame[7] = (byte) (crc >> 8);
-        log("TX", frame);
+        log("TX", frame, null);
         out.write(frame);
         out.flush();
         byte[] resp = readBytes(7);
-        log("RX", resp);
         verifyCRC(resp);
+        log("RX", resp, null);
         return ((resp[3] & 0xFF) << 8) | (resp[4] & 0xFF);
     }
 
@@ -181,9 +187,9 @@ public class ModbusTransport {
      * @param value Raw 16-bit value to write to the register.
      * @throws Exception If the device does not respond, the response frame is invalid, or the CRC verification fails.
      */
-    public void writeRegister(final byte slave, final int reg, int value) throws Exception {
+    public void writeRegister(final byte slave, final int reg, final int value) throws Exception {
         byte[] frame = new byte[8];
-        frame[0] = slave; // ModbusConstants.SLAVE_ADDRESS_1;
+        frame[0] = slave;
         frame[1] = ModbusFunctionCodes.WRITE_SINGLE_REGISTER;
         frame[2] = (byte) (reg >> 8);
         frame[3] = (byte) reg;
@@ -192,22 +198,110 @@ public class ModbusTransport {
         int crc = ModbusCRC.calculate(frame, 6);
         frame[6] = (byte) crc;
         frame[7] = (byte) (crc >> 8);
-        log("TX", frame);
-
+        log("TX", frame, null);
         out.write(frame);
         out.flush();
         byte[] resp = readBytes(8);
-        log("RX", resp);
         verifyCRC(resp);
+        log("RX", resp, null);
     }
 
-    // TODO: Improve logging
     @Deprecated
-    void log(String dir, byte[] data) {
-        StringBuilder sb = new StringBuilder();
+    void log(final String dir, final byte[] data) {
+        log(dir, data, null);
+    }
+
+    /**
+     * Logs a Modbus frame via SLF4J at INFO level, automatically appending a human-readable
+     * annotation decoded from the frame bytes themselves.
+     *
+     * <p>For TX frames the register address (and written value for fc=0x06) are decoded from
+     * bytes[2..3] and bytes[4..5] respectively. An optional caller-supplied {@code hint} is
+     * appended after the auto-decoded part.</p>
+     *
+     * <p>Example output:</p>
+     * <pre>
+     * TX  01 03 00 17 00 01 34 0E  (read reg 0x0017)
+     * RX  01 03 02 00 6E B8 C2     (rx 3 data bytes)
+     * TX  01 06 00 00 01 F4 48 3B  (write reg 0x0000 = 500)
+     * RX  01 06 00 00 01 F4 48 3B  (write reg 0x0000 = 500)
+     * </pre>
+     *
+     * @param dir  direction label, e.g. {@code "TX"} or {@code "RX"}
+     * @param data frame bytes to format as hex
+     * @param hint optional extra annotation appended after auto-decoded info, or {@code null}
+     */
+    @Deprecated
+    void log(final String dir, final byte[] data, final String hint) {
+        // First line: raw hex bytes at INFO — always visible.
+        StringBuilder sb = new StringBuilder(dir).append("  ");
         for (byte b : data)
             sb.append(String.format("%02X ", b));
-        System.out.println(dir + "  " + sb);
+        logger.info(sb.toString());
+
+        // Second line: human-readable annotation at DEBUG — visible only when debug is enabled.
+        String auto = decodeFrame(dir, data);
+        if (auto != null || hint != null) {
+            StringBuilder detail = new StringBuilder("    -> ");
+            if (auto != null) detail.append(auto);
+            if (auto != null && hint != null) detail.append(", ");
+            if (hint != null) detail.append(hint);
+            logger.debug(detail.toString());
+        }
+    }
+
+    /**
+     * Derives a short human-readable annotation from a raw Modbus RTU frame.
+     *
+     * <p>
+     * For TX frames (direction {@code "TX"}) with at least 6 bytes:
+     * </p>
+     * <ul>
+     * <li>fc=0x03 (read holding registers): reports the register address.</li>
+     * <li>fc=0x06 (write single register): reports the register address and raw value written.</li>
+     * </ul>
+     * <p>
+     * For RX frames with fc=0x03 (read response, 7 bytes): reports the number of data bytes returned.
+     * For RX frames with fc=0x06 (write echo, 8 bytes): reports the echoed register address and value.
+     * Returns {@code null} for unrecognised frames or frames that are too short to decode.
+     * </p>
+     *
+     * @param dir  direction label ({@code "TX"} or {@code "RX"})
+     * @param data raw frame bytes
+     * @return annotation string, or {@code null} if the frame cannot be decoded
+     */
+    private static String decodeFrame(final String dir, final byte[] data) {
+        if (data == null || data.length < 4) {
+            return null;
+        }
+        final byte fc = data[1];
+        if ("TX".equals(dir)) {
+            if (data.length >= 6) {
+                int reg = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
+                String regName = DeviceRegister.REGISTRY.getOrDefault(reg, String.format("0x%04X", reg));
+                if (fc == ModbusFunctionCodes.READ_HOLDING_REGISTERS) {
+                    return "Read " + regName;
+                }
+                if (fc == ModbusFunctionCodes.WRITE_SINGLE_REGISTER) {
+                    int val = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
+                    return String.format("Write %s = %d", regName, val);
+                }
+            }
+        } else {
+            // RX: fc=0x03 read response — [slave][0x03][byteCount][val_hi][val_lo][crc×2]
+            if (fc == ModbusFunctionCodes.READ_HOLDING_REGISTERS && data.length == 7) {
+                int val = ((data[3] & 0xFF) << 8) | (data[4] & 0xFF);
+                return String.format("Value = %d (0x%04X)", val, val);
+            }
+            // RX: fc=0x06 write echo — same layout as TX
+            if (fc == ModbusFunctionCodes.WRITE_SINGLE_REGISTER && data.length >= 6) {
+                int reg = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
+                String regName = DeviceRegister.REGISTRY.getOrDefault(reg, String.format("0x%04X", reg));
+                int val = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
+                return String.format("Write %s = %d", regName, val);
+            }
+        }
+        return null;
     }
 
     /**

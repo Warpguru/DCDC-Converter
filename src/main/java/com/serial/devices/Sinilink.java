@@ -1,8 +1,12 @@
 package com.serial.devices;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.serial.device.DeviceRegister;
 import com.serial.device.ModbusDevice;
 import com.serial.device.SinilinkRegisters;
+import com.serial.devices.ifc.DC2DCConverter;
 import com.serial.modbus.ModbusTransport;
 
 /**
@@ -16,6 +20,8 @@ import com.serial.modbus.ModbusTransport;
  * </ul>
  */
 public class Sinilink extends ModbusDevice implements DC2DCConverter {
+
+    private static final Logger logger = LoggerFactory.getLogger(Sinilink.class);
 
     public static final DeviceRegister VSET = new DeviceRegister("Voltage Setpoint", "V", SinilinkRegisters.REG_VSET, 100);
 
@@ -59,18 +65,19 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
      * @return {@link Sinilink} instance or {@code Null}
      */
     public DC2DCConverter verifyDevicePresent() {
-        System.out.println("Checking for Sinilink device...");
+        logger.info("Checking for Sinilink device...");
         // Sinilink defaults to 115200 Baud
         for (final Integer baud : ModbusTransport.BAUDS) {
             try {
                 // Initialize with current Baud rate
                 transport = new ModbusTransport(portName, baud);
+                logger.debug("Trying baud rate {}", baud);
                 // Try firmware register
                 try {
                     int firmwareVersion = getFirmwareVersion();
-                    System.out.println("Firmware version register read: " + firmwareVersion);
+                    logger.info("Firmware version register read: {}", firmwareVersion);
                     if (firmwareVersion > 0 && firmwareVersion < 65535) {
-                        System.out.println("Device detected via firmware version register.");
+                        logger.info("Device detected via firmware version register.");
                         if (firmwareVersion == 110) {
                             this.manufacturer = "Sinilink";
                             this.device = "XY6008";
@@ -78,14 +85,14 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
                     }
                 } catch (Exception e) {
                     // Probably wrong Baud rate
-                    // System.out.println("Firmware version register read failed: " + e.getMessage());
+                    logger.debug("Firmware version read failed at {} baud: {}", baud, e.getMessage());
                 }
                 // Try hardware register
                 try {
                     int modelVersion = getModelVersion();
-                    System.out.println("Model version register read: " + modelVersion);
+                    logger.info("Model version register read: {}", modelVersion);
                     if (modelVersion > 0 && modelVersion < 65535) {
-                        System.out.println("Device detected via model version register.");
+                        logger.info("Device detected via model version register.");
                         if (modelVersion == 22802) {
                             this.manufacturer = "Sinilink";
                             this.device = "XY6008";
@@ -93,7 +100,7 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
                     }
                 } catch (Exception e) {
                     // Probably wrong Baud rate
-                    // System.out.println("Model version register read failed: " + e.getMessage());
+                    logger.debug("Model version read failed at {} baud: {}", baud, e.getMessage());
                 }
                 if (!isDeviceDetected()) {
                     // Probably still wrong Baud rate, retry with next Baud rate
@@ -103,13 +110,13 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
                     break;
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                logger.debug("Transport error at {} baud: {}", baud, e.getMessage());
                 transport.close();
             }
         }
         // Check for detected device
         if (!isDeviceDetected()) {
-            System.out.println("No Sinilink detected.");
+            logger.info("No Sinilink detected.");
         }
         return this;
     }

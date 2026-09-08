@@ -40,8 +40,8 @@ public class XY6008TestTool {
             System.out.println("       Port: " + args[0] + " invalid!");
             return;
         }
-        Sinilink xy6008 = new Sinilink(transport, ModbusConstants.SLAVE_ADDRESS_1);
-        if (!xy6008.verifyDevicePresent()) {
+        Sinilink xy6008 = new Sinilink(args[0], ModbusConstants.SLAVE_ADDRESS_1);
+        if (xy6008.verifyDevicePresent() == null) {
             System.out.println("No Sinilink detected on this port.");
             transport.close();
             return;
