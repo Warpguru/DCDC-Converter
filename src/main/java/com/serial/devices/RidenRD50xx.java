@@ -1,8 +1,12 @@
 package com.serial.devices;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.serial.device.DeviceRegister;
 import com.serial.device.ModbusDevice;
 import com.serial.device.RidenRegistersRD50xx;
+import com.serial.devices.ifc.DC2DCConverter;
 import com.serial.modbus.ModbusTransport;
 
 /**
@@ -16,6 +20,8 @@ import com.serial.modbus.ModbusTransport;
  * </ul>
  */
 public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
+
+    private static final Logger logger = LoggerFactory.getLogger(RidenRD50xx.class);
 
     public static final DeviceRegister VSET = new DeviceRegister("Voltage Setpoint", "V", RidenRegistersRD50xx.REG_VSET, 100);
 
@@ -87,39 +93,40 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
      * @return {@link Riden} instance or {@code Null}
      */
     public DC2DCConverter verifyDevicePresent() {
-        System.out.println("Checking for Riden RD50xx device...");
+        logger.info("Checking for Riden RD50xx device...");
         // Riden defaults to 9600 Baud
         for (final Integer baud : ModbusTransport.BAUDS) {
             try {
                 // Initialize with current Baud rate
                 transport = new ModbusTransport(portName, baud);
+                logger.debug("Trying baud rate {}", baud);
                 // Try firmware register
                 try {
                     int firmwareVersion = getFirmwareVersion();
-                    System.out.println("Firmware version register read: " + firmwareVersion);
+                    logger.info("Firmware version register read: {}", firmwareVersion);
                     if (firmwareVersion > 0 && firmwareVersion < 65535) {
-                        System.out.println("Device detected via firmware version register.");
+                        logger.info("Device detected via firmware version register.");
                         if (firmwareVersion == 110) {
                             this.manufacturer = "Riden";
                             this.device = "RD5020";
                         }
                     }
-            } catch (Exception e) {
-                // Probably wrong Baud rate
-                // System.out.println("Firmware version register read failed: " + e.getMessage());
-            }
+                } catch (Exception e) {
+                    // Probably wrong Baud rate
+                    logger.debug("Firmware version read failed at {} baud: {}", baud, e.getMessage());
+                }
                 // Try hardware register
                 try {
                     int deviceId = getDeviceId();
-                    System.out.println("Device Id register read: " + deviceId);
+                    logger.info("Device Id register read: {}", deviceId);
                     if (deviceId >= 0 && deviceId < 65535) {
-                        System.out.println("Device detected via device Id register.");
+                        logger.info("Device detected via device Id register.");
                         this.manufacturer = "Riden";
                         this.device = String.format("RD%04d", deviceId);
                     }
                 } catch (Exception e) {
                     // Probably wrong Baud rate
-                    // System.out.println("Model version register read failed: " + e.getMessage());
+                    logger.debug("Device Id read failed at {} baud: {}", baud, e.getMessage());
                 }
                 if (!isDeviceDetected()) {
                     // Probably still wrong Baud rate, retry with next Baud rate
@@ -129,13 +136,13 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
                     break;
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                logger.debug("Transport error at {} baud: {}", baud, e.getMessage());
                 transport.close();
             }
         }
         // Check for detected device
         if (!isDeviceDetected()) {
-            System.out.println("No Riden RD50xx detected.");
+            logger.info("No Riden RD50xx detected.");
         }
         return this;
     }

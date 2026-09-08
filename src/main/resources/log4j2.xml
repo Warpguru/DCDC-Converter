@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <!--
+          ConsoleAppender: Writes to standard output.
+          Plain message-only format so the console output reads like normal program output.
+        -->
+        <Console name="ConsoleAppender" target="SYSTEM_OUT">
+            <PatternLayout pattern="%msg%n" charset="UTF-8" />
+        </Console>
+
+        <!--
+          FileAppender: Writes structured diagnostics to "SerialController.log".
+          Full pattern including timestamp, thread, level, and source location.
+          Rolls to a new file each day; old files are named SerialController-yyyy-MM-dd.log.
+        -->
+        <RollingFile name="FileAppender"
+                     fileName="SerialController.log"
+                     filePattern="SerialController-%d{yyyy-MM-dd}.log"
+                     immediateFlush="true"
+                     append="true">
+            <PatternLayout
+                    pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%-30.30t] %-5level %-45logger{1.1.1}:%4L - %msg%n" />
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" />
+            </Policies>
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+        <!--
+          Root Logger: Catches third-party library logging (Jetty, jSerialComm, Jackson, …).
+          Routed to the file only to keep the console clean.
+        -->
+        <Root level="WARN">
+            <AppenderRef ref="FileAppender" />
+        </Root>
+
+        <!--
+          io.javalin Logger: Allows the Javalin startup banner and server lifecycle messages
+          to appear on both the console and the log file at INFO level.
+        -->
+        <Logger name="io.javalin" level="INFO" additivity="false">
+            <AppenderRef ref="ConsoleAppender" />
+            <AppenderRef ref="FileAppender" />
+        </Logger>
+
+        <!--
+          com.serial Logger: Single logger for all application code.
+          - Console: plain %msg%n, INFO and above — human-readable program output.
+          - File: full detail, ALL levels — complete diagnostic record (includes DEBUG Modbus annotations).
+        -->
+        <Logger name="com.serial" level="ALL" additivity="false">
+            <AppenderRef ref="ConsoleAppender">
+                <LevelRangeFilter minLevel="FATAL" maxLevel="INFO" onMatch="ACCEPT" onMismatch="DENY" />
+            </AppenderRef>
+            <AppenderRef ref="FileAppender" />
+        </Logger>
+    </Loggers>
+</Configuration>

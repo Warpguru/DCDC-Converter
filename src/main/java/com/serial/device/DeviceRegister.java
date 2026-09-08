@@ -1,5 +1,7 @@
 package com.serial.device;
 
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * Describes a {@code Modbus} register used by a device driver.
  *
@@ -52,6 +54,17 @@ package com.serial.device;
  * </p>
  */
 public class DeviceRegister {
+
+    /**
+     * Global registry mapping Modbus register addresses to their human-readable names.
+     *
+     * <p>
+     * Every {@link DeviceRegister} instance registers itself here on construction. This allows
+     * {@code ModbusTransport} to resolve a raw address to a name for log annotations without
+     * any direct coupling to the driver classes.
+     * </p>
+     */
+    public static final ConcurrentHashMap<Integer, String> REGISTRY = new ConcurrentHashMap<>();
 
     /**
      * {@code Modbus} register name.
@@ -122,6 +135,7 @@ public class DeviceRegister {
         this.unit = unit;
         this.address = address;
         this.scale = scale;
+        REGISTRY.put(address, name);
     }
 
     /**
@@ -136,6 +150,7 @@ public class DeviceRegister {
         this.unit = unit;
         this.address = address;
         this.scale = 1;
+        REGISTRY.put(address, name);
     }
 
     /**

@@ -1,5 +1,8 @@
 package com.serial.device;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.serial.modbus.ModbusTransport;
 
 /**
@@ -40,6 +43,8 @@ import com.serial.modbus.ModbusTransport;
  * </p>
  */
 public abstract class ModbusDevice {
+
+    private static final Logger logger = LoggerFactory.getLogger(ModbusDevice.class);
 
     /** Retry counter. */
     protected static final int MAX_RETRY = 3;
@@ -156,7 +161,9 @@ public abstract class ModbusDevice {
      */
     public double read(final DeviceRegister reg) throws Exception {
         int raw = read(reg.address);
-        return reg.decode(raw);
+        double value = reg.decode(raw);
+        logger.debug("    -> {}: {} {}", reg.name, formatValue(value, reg.scale), reg.unit);
+        return value;
     }
 
     /**
@@ -196,6 +203,7 @@ public abstract class ModbusDevice {
      * @throws Exception if communication with the device fails
      */
     public void write(final DeviceRegister reg, final double value) throws Exception {
+        logger.debug("    -> {}: {} {} (write)", reg.name, formatValue(value, reg.scale), reg.unit);
         write(reg.address, reg.encode(value));
     }
 
@@ -209,16 +217,18 @@ public abstract class ModbusDevice {
      * @throws Exception
      */
     public void writeVerified(final DeviceRegister regSet, final DeviceRegister regOut, final double value) throws Exception {
-        System.out.println("\nSetting value → " + value + " " + regSet.unit);
+        logger.info("writeVerified {} -> {} {}", regSet.name, formatValue(value, regSet.scale), regSet.unit);
         for (int attempt = 1; attempt <= MAX_RETRY; attempt++) {
-            // writeRegister(XY6008Registers.REG_VSET, raw);
             write(regSet, value);
             Thread.sleep(200);
             double readSet = read(regSet);
             double readOut = read(regOut);
-            System.out.println(String.format("Attempt %d SET=%.2f%s OUT=%.2f%s", attempt, readSet, regSet.unit, readOut, regOut.unit));
+            logger.info("  attempt {}: SET={} {} OUT={} {}",
+                    attempt,
+                    formatValue(readSet, regSet.scale), regSet.unit,
+                    formatValue(readOut, regOut.scale), regOut.unit);
             if (readSet == value) {
-                System.out.println(regSet.name + " verified");
+                logger.info("  {} verified", regSet.name);
                 return;
             }
         }
@@ -253,6 +263,28 @@ public abstract class ModbusDevice {
      */
     protected int read(final int register) throws Exception {
         return transport.readRegister(slave, register);
+    }
+
+    /**
+     * Formats a numeric engineering value with the precision implied by the register's scale factor.
+     *
+     * <p>
+     * The number of decimal places is derived from the scale: log10(scale). For example:
+     * </p>
+     * <ul>
+     * <li>scale 1    → 0 decimal places (e.g. integers)</li>
+     * <li>scale 10   → 1 decimal place  (e.g. temperature: 35.0 °C)</li>
+     * <li>scale 100  → 2 decimal places (e.g. voltage: 5.00 V)</li>
+     * <li>scale 1000 → 3 decimal places (e.g. current: 1.000 A)</li>
+     * </ul>
+     *
+     * @param value the engineering value to format
+     * @param scale the register's scale factor
+     * @return formatted string with the appropriate number of decimal places
+     */
+    private static String formatValue(final double value, final double scale) {
+        int decimals = (scale > 1) ? (int) Math.round(Math.log10(scale)) : 0;
+        return String.format("%." + decimals + "f", value);
     }
 
     /**

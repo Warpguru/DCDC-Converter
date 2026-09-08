@@ -1,4 +1,4 @@
-package com.serial.devices;
+package com.serial.devices.ifc;
 
 /**
  * Common interfaces for {@code DC/DC Converter}s.
