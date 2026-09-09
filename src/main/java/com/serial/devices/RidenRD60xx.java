@@ -1,5 +1,8 @@
 package com.serial.devices;
 
+import java.util.List;
+import java.util.Set;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,8 +75,20 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
             RidenRegistersRD60xx.REG_CURRENT_RANGE);
 
     /**
+     * Whitelist of known RD60xx series device IDs (e.g. 6006, 6012, 6018, 6024, 6030, 60062, 60302).
+     *
+     * <p>
+     * Register 0x0000 returns the device model signature. Validating against this whitelist
+     * prevents false positives on devices like Sinilink (where register 0x0000 is VSET).
+     * </p>
+     */
+    private static final Set<Integer> KNOWN_DEVICE_IDS = Set.of(
+            6006, 6012, 6018, 6024, 6030, 60062, 60302
+    );
+
+    /**
      * Constructor.
-     * 
+     *
      * @param portName of {@code SerialPort} used with Modbus protocol
      * @param slave    port to use
      */
@@ -82,59 +97,64 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
     }
 
     /**
-     * Verify that {@code Riden RD60xx} is present.
-     * 
-     * @return {@link Riden} instance or {@code Null}
+     * Verify that {@code Riden RD60xx} is present using all standard baud rates in {@link ModbusTransport#BAUDS}.
+     *
+     * @return this {@link RidenRD60xx} instance
      */
     public DC2DCConverter verifyDevicePresent() {
+        return verifyDevicePresent(ModbusTransport.BAUDS);
+    }
+
+    /**
+     * Verify that {@code Riden RD60xx} is present probing only the specified baud rates.
+     *
+     * <p>
+     * Probes the device ID register (0x0000) first and validates it against {@link #KNOWN_DEVICE_IDS}.
+     * If matched, reads the firmware version (0x0003) to cross-check and complete detection.
+     * </p>
+     *
+     * @param bauds list of baud rates to probe in order
+     * @return this {@link RidenRD60xx} instance
+     */
+    public DC2DCConverter verifyDevicePresent(final List<Integer> bauds) {
         logger.info("Checking for Riden RD60xx device...");
-        // Riden defaults to 9600 Baud
-        for (final Integer baud : ModbusTransport.BAUDS) {
+        for (final Integer baud : bauds) {
             try {
-                // Initialize with current Baud rate
                 transport = new ModbusTransport(portName, baud);
                 logger.debug("Trying baud rate {}", baud);
-                // Try firmware register
-                try {
-                    int firmwareVersion = getFirmwareVersion();
-                    logger.info("Firmware version register read: {}", firmwareVersion);
-                    if (firmwareVersion > 0 && firmwareVersion < 65535) {
-                        logger.info("Device detected via firmware version register.");
-                        if (firmwareVersion == 110) {
-                            this.manufacturer = "Riden";
-                            this.device = "RD6020";
-                        }
-                    }
-                } catch (Exception e) {
-                    // Probably wrong Baud rate
-                    logger.debug("Firmware version read failed at {} baud: {}", baud, e.getMessage());
-                }
-                // Try device id register
+
+                // Probe Device ID register (0x0000)
                 try {
                     int deviceId = getDeviceId();
-                    logger.info("Device Id register read: {}", deviceId);
-                    if (deviceId >= 0 && deviceId < 10000) {
-                        logger.info("Device detected via device Id register.");
+                    logger.debug("Device ID register read at {} baud: {}", baud, deviceId);
+                    if (KNOWN_DEVICE_IDS.contains(deviceId)) {
+                        int fw = 0;
+                        try {
+                            fw = getFirmwareVersion();
+                        } catch (Exception ignored) {
+                        }
                         this.manufacturer = "Riden";
-                        this.device = String.format("RD%04d", deviceId);
+                        // Standard models format as RD60xx, precision models (e.g. 60062) format as RD6006P/RD60xx
+                        int baseModel = (deviceId > 10000) ? (deviceId / 10) : deviceId;
+                        this.device = String.format("RD%04d", baseModel);
+                        logger.info("Detected Riden RD60xx (Model: {}, Signature: {}, FW: {}) at {} baud.", this.device, deviceId, fw, baud);
                     }
                 } catch (Exception e) {
-                    // Probably wrong Baud rate
-                    logger.debug("Device Id read failed at {} baud: {}", baud, e.getMessage());
+                    logger.debug("Device ID read failed at {} baud: {}", baud, e.getMessage());
                 }
+
                 if (!isDeviceDetected()) {
-                    // Probably still wrong Baud rate, retry with next Baud rate
                     transport.close();
                 } else {
-                    // Device detected
                     break;
                 }
             } catch (Exception e) {
                 logger.debug("Transport error at {} baud: {}", baud, e.getMessage());
-                transport.close();
+                if (transport != null) {
+                    transport.close();
+                }
             }
         }
-        // Check for detected device
         if (!isDeviceDetected()) {
             logger.info("No Riden RD60xx detected.");
         }
