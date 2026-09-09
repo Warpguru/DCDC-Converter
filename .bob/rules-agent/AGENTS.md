@@ -1,15 +1,21 @@
 # Project Coding Rules (Non-Obvious Only)
 
-- **Environment first**: run `D:\Development\SetupEnvMaven.cmd` and `D:\Development\SetupEnvJava21.cmd` in `cmd.exe` before invoking `mvn` or `java`.
-- **`com.serial.util.*` is dead code** — use `com.serial.modbus.*` only; never import from the `util` package.
-- **`*.java.old` / `*Old.java` / `*TestTool*.java`** at `com.serial` package root are scratch files — do not import or build on them.
-- **`DC2DCConverter` interface is mandatory** — every new device driver must implement it, even if some methods are stubs.
-- **`DeviceRegister` for all register access** — never hard-code raw scale math inline; always define a `DeviceRegister` constant with the scale and use `read()`/`write()`.
-- **`writeVerified()` for safety-critical writes** — voltage/current setpoint changes should use `ModbusDevice.writeVerified()`, not plain `write()`, to ensure the device accepted the value.
-- **Auto-baud probe order** (`ModbusTransport.BAUDS`): 115200 → 57600 → 38400 → 19200 → 9600. New device `verifyDevicePresent()` methods must iterate this list, not a hardcoded baud.
-- **`@formatter:off` / `@formatter:on`** must be preserved around multi-line `@OpenApi` annotations.
-- **`final` on all method parameters** is required by project convention.
-- **Javadoc is mandatory** on all public/protected members; include `<pre>` code examples for non-trivial methods.
-- **No test framework is wired** — there is no JUnit or test runner in `pom.xml`; verification requires a physical device.
-- **Fat JAR target name** is `SerialController.jar` (set by `<finalName>` in `pom.xml`), not the default artifact name.
-- **`SerialControllerApp` runs for 600 s** then self-terminates (`sleepSeconds(600)`); extend this for longer manual test sessions.
+- **Build command is `mvn clean source:jar install`** - NOT `mvn clean package`. Run `D:\Development\SetupEnvMaven.cmd` and `D:\Development\SetupEnvJava21.cmd` in `cmd.exe` first (see AGENTS.md).
+- **`DC2DCConverter.getVoltage()` reads VOUT, not VSET.** Reading setpoints requires driver-specific register access - see `DeviceService.readSetpoints()` which casts to the concrete driver type.
+- **`ConverterState` limit setters are package-private** (`setMaxVoltage`, etc.) - only `DeviceService` may call them; never widen these to `public`.
+- **`DeviceService.getObjectMapper()` is the singleton** - never construct a new `ObjectMapper`; always use this shared instance.
+- **All `DeviceService` write methods must be `synchronized`** - maps to FreeRTOS mutex; never add `ExecutorService`, `CompletableFuture`, or any Java-specific concurrency abstraction.
+- **Only two background threads allowed:** `modbus-poller` (in `DeviceService`) and `ws-broadcaster` (in `WebSocketService`). Do not add more.
+- **`DeviceRegister` instances self-register on construction** into the static `REGISTRY` map automatically; no manual registration is needed. Two registers at the same address silently overwrite - avoid.
+- **`util` package is dead** - all `.java` files are `.txt` stubs; use `com.serial.modbus.*` for any Modbus code.
+- **`@formatter:off` / `@formatter:on` is mandatory around every `@OpenApi` annotation block** - IDE formatters break multi-line annotation arrays.
+- **Device properties files** live at `src/main/resources/devices/<DeviceName>.properties` where `DeviceName` matches `getDevice()` return value (e.g. `XY6008`, `RD5020`, `RD6020`).
+- **Setpoint writes use `PUT`, not `POST`** - only `clearProtection` and `exit` use `POST`.
+- **DTO inner classes (`VoltageRequest`, `LimitsResponse`, etc.) live inside `RestService`** as `public static` nested classes.
+- **String literals used in logic must be named constants** — e.g. `ERR_SERIAL_TIMEOUT` in `DeviceService`, `KEY_*` in `WebSocketService`. Never branch on a bare string literal.
+- **`demoVoltages()` body is intentionally empty** — `@Deprecated`, call site removed; never call it and never delete it.
+- **Riden RD50xx current/power scale is 100** (not 1000) - `ISET`/`IOUT` in A×100, `POUT` in W×100. Sinilink current scale is 1000.
+- **`DeviceService.setVoltage()`/`setCurrent()` use plain `write()`, not `writeVerified()`** - `writeVerified()` adds ~600 ms latency from its read-back retry loop; avoid it for setpoints.
+- **WS message keys are named constants** in `WebSocketService` (`KEY_SET_CURRENT`, `KEY_SET_VOLTAGE`, `KEY_SET_OUTPUT`, `KEY_SET_KEYPAD`) - always use these constants, never bare string literals.
+- **OpenAPI annotation processor runs at compile time** - changing `@OpenApi` annotations requires a full rebuild before the spec updates.
+- **`final` on all method parameters** is the project convention - enforce this on every new method.

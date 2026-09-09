@@ -20,10 +20,10 @@ package com.serial.service;
  * Fields are grouped into three logical categories:
  * </p>
  * <ol>
- * <li><strong>Measured values</strong> — updated by the polling thread from device registers every second.</li>
- * <li><strong>Setpoints</strong> — the voltage and current targets. Also polled every second so that changes
+ * <li><strong>Measured values</strong> - updated by the polling thread from device registers every second.</li>
+ * <li><strong>Setpoints</strong> - the voltage and current targets. Also polled every second so that changes
  * made on the device's physical front panel (buttons/wheel) are picked up automatically.</li>
- * <li><strong>Device limits</strong> — populated once after device detection from a per-device properties file.
+ * <li><strong>Device limits</strong> - populated once after device detection from a per-device properties file.
  * Setters for limit fields are package-private; only {@link DeviceService} may set them.</li>
  * </ol>
  */
@@ -62,8 +62,8 @@ public class ConverterState {
      * Output enable state.
      *
      * <ul>
-     * <li>{@code true} — output is ON</li>
-     * <li>{@code false} — output is OFF</li>
+     * <li>{@code true} - output is ON</li>
+     * <li>{@code false} - output is OFF</li>
      * </ul>
      */
     private volatile boolean outputEnabled;
@@ -72,8 +72,8 @@ public class ConverterState {
      * Keypad lock (child lock) state.
      *
      * <ul>
-     * <li>{@code true} — keypad is locked</li>
-     * <li>{@code false} — keypad is unlocked</li>
+     * <li>{@code true} - keypad is locked</li>
+     * <li>{@code false} - keypad is unlocked</li>
      * </ul>
      */
     private volatile boolean keypadLocked;
@@ -82,17 +82,17 @@ public class ConverterState {
      * Protection state code.
      *
      * <ul>
-     * <li>0 — normal (no protection tripped)</li>
-     * <li>1 — OVP (over-voltage protection)</li>
-     * <li>2 — OCP (over-current protection)</li>
-     * <li>3 — OPP (over-power protection)</li>
-     * <li>4 — LVP (low-voltage protection)</li>
-     * <li>5 — OAH (over ampere-hour)</li>
-     * <li>6 — OHP (over-time protection)</li>
-     * <li>7 — OTP (over-temperature protection)</li>
-     * <li>8 — OEP</li>
-     * <li>9 — OWH</li>
-     * <li>10 — ICP</li>
+     * <li>0 - normal (no protection tripped)</li>
+     * <li>1 - OVP (over-voltage protection)</li>
+     * <li>2 - OCP (over-current protection)</li>
+     * <li>3 - OPP (over-power protection)</li>
+     * <li>4 - LVP (low-voltage protection)</li>
+     * <li>5 - OAH (over ampere-hour)</li>
+     * <li>6 - OHP (over-time protection)</li>
+     * <li>7 - OTP (over-temperature protection)</li>
+     * <li>8 - OEP</li>
+     * <li>9 - OWH</li>
+     * <li>10 - ICP</li>
      * </ul>
      */
     private volatile int protectionState;
@@ -101,11 +101,21 @@ public class ConverterState {
      * Regulation mode.
      *
      * <ul>
-     * <li>{@code true} — CV (constant voltage)</li>
-     * <li>{@code false} — CC (constant current)</li>
+     * <li>{@code true} - CV (constant voltage)</li>
+     * <li>{@code false} - CC (constant current)</li>
      * </ul>
      */
     private volatile boolean cvMode;
+
+    /**
+     * Device online state.
+     *
+     * <ul>
+     * <li>{@code true} - Modbus communication is healthy (last poll succeeded)</li>
+     * <li>{@code false} - communication has failed; transport reconnection is in progress</li>
+     * </ul>
+     */
+    private volatile boolean deviceOnline;
 
     // -------------------------------------------------------------------------
     // Setpoints (written by user via REST / WebSocket; also polled from device
@@ -135,6 +145,13 @@ public class ConverterState {
     // -------------------------------------------------------------------------
     // Device limits (set once after detection from properties file)
     // -------------------------------------------------------------------------
+
+    /**
+     * Power-converter topology — controls whether a Vin-derived voltage ceiling is enforced.
+     *
+     * <p>Defaults to {@link ConverterTopology#BUCK_BOOST} (no restriction) when the property is absent.</p>
+     */
+    private volatile ConverterTopology converterTopology = ConverterTopology.BUCK_BOOST;
 
     /**
      * Device model name, e.g. {@code "XY6008"}, {@code "RD5020"}.
@@ -177,7 +194,7 @@ public class ConverterState {
     private volatile double maxPower;
 
     // -------------------------------------------------------------------------
-    // Getters — measured values
+    // Getters - measured values
     // -------------------------------------------------------------------------
 
     /**
@@ -342,8 +359,26 @@ public class ConverterState {
         this.cvMode = cvMode;
     }
 
+    /**
+     * Returns the device online state.
+     *
+     * @return {@code true} if Modbus communication is healthy, {@code false} if the device is unreachable
+     */
+    public boolean isDeviceOnline() {
+        return deviceOnline;
+    }
+
+    /**
+     * Sets the device online state. Called by the polling thread.
+     *
+     * @param deviceOnline {@code true} if communication succeeded, {@code false} if it failed
+     */
+    public void setDeviceOnline(final boolean deviceOnline) {
+        this.deviceOnline = deviceOnline;
+    }
+
     // -------------------------------------------------------------------------
-    // Getters/setters — setpoints
+    // Getters/setters - setpoints
     // -------------------------------------------------------------------------
 
     /**
@@ -385,7 +420,7 @@ public class ConverterState {
     }
 
     // -------------------------------------------------------------------------
-    // Getters/setters — device limits (setters package-private)
+    // Getters/setters - device limits (setters package-private)
     // -------------------------------------------------------------------------
 
     /**
@@ -398,7 +433,7 @@ public class ConverterState {
     }
 
     /**
-     * Sets the device model name. Package-private — only {@link DeviceService} may call this.
+     * Sets the device model name. Package-private - only {@link DeviceService} may call this.
      *
      * @param deviceName device model name
      */
@@ -416,7 +451,7 @@ public class ConverterState {
     }
 
     /**
-     * Sets the device manufacturer name. Package-private — only {@link DeviceService} may call this.
+     * Sets the device manufacturer name. Package-private - only {@link DeviceService} may call this.
      *
      * @param manufacturer manufacturer name
      */
@@ -434,7 +469,7 @@ public class ConverterState {
     }
 
     /**
-     * Sets the maximum output voltage. Package-private — only {@link DeviceService} may call this.
+     * Sets the maximum output voltage. Package-private - only {@link DeviceService} may call this.
      *
      * @param maxVoltage maximum voltage in volts (V)
      */
@@ -452,7 +487,7 @@ public class ConverterState {
     }
 
     /**
-     * Sets the minimum output voltage. Package-private — only {@link DeviceService} may call this.
+     * Sets the minimum output voltage. Package-private - only {@link DeviceService} may call this.
      *
      * @param minVoltage minimum voltage in volts (V)
      */
@@ -470,7 +505,7 @@ public class ConverterState {
     }
 
     /**
-     * Sets the maximum output current. Package-private — only {@link DeviceService} may call this.
+     * Sets the maximum output current. Package-private - only {@link DeviceService} may call this.
      *
      * @param maxCurrent maximum current in amperes (A)
      */
@@ -488,7 +523,7 @@ public class ConverterState {
     }
 
     /**
-     * Sets the minimum output current. Package-private — only {@link DeviceService} may call this.
+     * Sets the minimum output current. Package-private - only {@link DeviceService} may call this.
      *
      * @param minCurrent minimum current in amperes (A)
      */
@@ -506,12 +541,30 @@ public class ConverterState {
     }
 
     /**
-     * Sets the maximum output power. Package-private — only {@link DeviceService} may call this.
+     * Sets the maximum output power. Package-private - only {@link DeviceService} may call this.
      *
      * @param maxPower maximum power in watts (W)
      */
     void setMaxPower(final double maxPower) {
         this.maxPower = maxPower;
+    }
+
+    /**
+     * Returns the converter topology.
+     *
+     * @return topology; never {@code null}
+     */
+    public ConverterTopology getConverterTopology() {
+        return converterTopology;
+    }
+
+    /**
+     * Sets the converter topology. Package-private — only {@link DeviceService} may call this.
+     *
+     * @param converterTopology topology to set; must not be {@code null}
+     */
+    void setConverterTopology(final ConverterTopology converterTopology) {
+        this.converterTopology = converterTopology;
     }
 
     // -------------------------------------------------------------------------

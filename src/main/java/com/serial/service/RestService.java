@@ -30,13 +30,13 @@ import io.javalin.security.BasicAuthCredentials;
  *
  * <p>Routes provided:</p>
  * <ul>
- * <li>{@code GET  /api/state}           — full converter state snapshot</li>
- * <li>{@code PUT  /api/voltage}          — set output voltage setpoint</li>
- * <li>{@code PUT  /api/current}          — set output current setpoint</li>
- * <li>{@code PUT  /api/output}           — enable or disable the output</li>
- * <li>{@code PUT  /api/keypad}           — lock or unlock the keypad (child lock)</li>
- * <li>{@code POST /api/protection/clear} — clear a tripped protection condition</li>
- * <li>{@code POST /api/exit}             — shut down the application (Basic Auth required)</li>
+ * <li>{@code GET  /api/state}           - full converter state snapshot</li>
+ * <li>{@code PUT  /api/voltage}          - set output voltage setpoint</li>
+ * <li>{@code PUT  /api/current}          - set output current setpoint</li>
+ * <li>{@code PUT  /api/output}           - enable or disable the output</li>
+ * <li>{@code PUT  /api/keypad}           - lock or unlock the keypad (child lock)</li>
+ * <li>{@code POST /api/protection/clear} - clear a tripped protection condition</li>
+ * <li>{@code POST /api/exit}             - shut down the application (Basic Auth required)</li>
  * </ul>
  *
  * <p>
@@ -106,10 +106,10 @@ public class RestService {
 
     private final DeviceService deviceService;
 
-    /** Javalin instance — used by the exit handler to stop the server. */
+    /** Javalin instance - used by the exit handler to stop the server. */
     private Javalin javalin;
 
-    /** Shutdown callback — called by the exit handler after sending the response. */
+    /** Shutdown callback - called by the exit handler after sending the response. */
     private Runnable shutdownHook;
 
     /**
@@ -228,7 +228,7 @@ public class RestService {
     /**
      * Sets the output voltage setpoint.
      *
-     * <p>Request body: {@code { "voltage": 5.0 }} — voltage in volts.</p>
+     * <p>Request body: {@code { "voltage": 5.0 }} - voltage in volts.</p>
      *
      * @param ctx the Javalin request context
      */
@@ -270,7 +270,7 @@ public class RestService {
     /**
      * Sets the output current setpoint.
      *
-     * <p>Request body: {@code { "current": 1.0 }} — current in amperes.</p>
+     * <p>Request body: {@code { "current": 1.0 }} - current in amperes.</p>
      *
      * @param ctx the Javalin request context
      */
@@ -502,7 +502,7 @@ public class RestService {
     private Properties loadExitCredentials() {
         File file = new File(PROPS_FILE);
         if (!file.exists()) {
-            logger.warn("Properties file '{}' not found — /api/exit is disabled.", PROPS_FILE);
+            logger.warn("Properties file '{}' not found - /api/exit is disabled.", PROPS_FILE);
             return null;
         }
         try (FileInputStream fis = new FileInputStream(file)) {
@@ -562,7 +562,7 @@ public class RestService {
     /**
      * Response body for {@code GET /api/limits}.
      *
-     * <p>Contains only the device capability limits — a subset of {@link ConverterState}
+     * <p>Contains only the device capability limits - a subset of {@link ConverterState}
      * useful for clients that need to know valid ranges without fetching the full state.</p>
      */
     public static class LimitsResponse {

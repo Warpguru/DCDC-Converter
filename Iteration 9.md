@@ -1,6 +1,6 @@
 # Iteration 9
 
-The goal of this iteration is to verify that all layers — REST API, WebSocket, and webpage — work correctly together, resolve any remaining integration conflicts (in particular the `demoVoltages()` / `DeviceService` transport conflict), and update all documentation to reflect the completed architecture.
+The goal of this iteration is to verify that all layers - REST API, WebSocket, and webpage - work correctly together, resolve any remaining integration conflicts (in particular the `demoVoltages()` / `DeviceService` transport conflict), and update all documentation to reflect the completed architecture.
 
 ## Context
 
@@ -14,11 +14,11 @@ Integration verification, conflict resolution, documentation update, and code hy
 
 ### 1. Resolve `demoVoltages()` Transport Conflict
 
-**Problem:** `SerialControllerApp.process()` currently calls `demoVoltages()` for every discovered serial port on startup. `demoVoltages()` opens its own `ModbusTransport` on the port. `DeviceService` also opens a `ModbusTransport` on the same port. These two transports will conflict — only one can hold the port open.
+**Problem:** `SerialControllerApp.process()` currently calls `demoVoltages()` for every discovered serial port on startup. `demoVoltages()` opens its own `ModbusTransport` on the port. `DeviceService` also opens a `ModbusTransport` on the same port. These two transports will conflict - only one can hold the port open.
 
 **Resolution:**
 - Remove the `demoVoltages()` call from `process()` permanently. The method is `@Deprecated` and was a proof-of-concept scaffold. It must no longer be called.
-- Keep the `demoVoltages()` method in the source file with its `@Deprecated` annotation — do not delete it (project rule: do not drop existing code without explicit instruction).
+- Keep the `demoVoltages()` method in the source file with its `@Deprecated` annotation - do not delete it (project rule: do not drop existing code without explicit instruction).
 - Add a code comment above the removed call site explaining why it was removed.
 
 ### 2. Thread-Safety Review of `ConverterState`
@@ -26,7 +26,7 @@ Integration verification, conflict resolution, documentation update, and code hy
 Review every field in `ConverterState`:
 - Confirm all mutable fields are `volatile`.
 - Confirm that compound read-modify-write operations (if any) use `synchronized` or `AtomicReference` as appropriate.
-- The polling thread (writes measured values) and the WebSocket/REST handlers (write setpoints) run concurrently — verify there are no race conditions on fields written by more than one thread.
+- The polling thread (writes measured values) and the WebSocket/REST handlers (write setpoints) run concurrently - verify there are no race conditions on fields written by more than one thread.
 
 Document the thread-safety contract in `ConverterState` class-level Javadoc.
 
@@ -54,11 +54,11 @@ Execute the following test sequence and verify each result:
 ### 4. Javadoc Completeness Pass
 
 Review all files in `com.serial.service`:
-- `ConverterState` — class Javadoc including thread-safety contract; Javadoc on every field and getter/setter.
-- `DeviceService` — class Javadoc; Javadoc on all public methods including `start()`, `stop()`, all set* methods.
-- `RestService` — class Javadoc; Javadoc on all handler methods (supplement `@OpenApi` annotations which describe the API contract but not the implementation).
-- `WebSocketService` — class Javadoc; Javadoc on all public methods.
-- `HtmlService` — if still empty, either add a stub Javadoc explaining its future purpose or remove the file (confirm with project owner before removing).
+- `ConverterState` - class Javadoc including thread-safety contract; Javadoc on every field and getter/setter.
+- `DeviceService` - class Javadoc; Javadoc on all public methods including `start()`, `stop()`, all set* methods.
+- `RestService` - class Javadoc; Javadoc on all handler methods (supplement `@OpenApi` annotations which describe the API contract but not the implementation).
+- `WebSocketService` - class Javadoc; Javadoc on all public methods.
+- `HtmlService` - if still empty, either add a stub Javadoc explaining its future purpose or remove the file (confirm with project owner before removing).
 
 ### 5. Resolve or Document Remaining TODOs
 
@@ -70,9 +70,9 @@ Search for `TODO` and `FIXME` comments across `com.serial.service.*` and `Serial
 
 Update the following sections of [`AGENTS.md`](AGENTS.md) to reflect the completed architecture:
 
-- **Architecture** — update the diagram to include `WebSocketService`, `RestService`, `ConverterState`, `DeviceService`, and the properties files.
-- **REST / WebSocket API** — update the endpoint list to include all 6 REST endpoints from Iteration 6 and the 3 WebSocket message keys from Iteration 7/8.
-- **Duplicate / Legacy Code** — note that `demoVoltages()` is still present but its call site has been removed.
+- **Architecture** - update the diagram to include `WebSocketService`, `RestService`, `ConverterState`, `DeviceService`, and the properties files.
+- **REST / WebSocket API** - update the endpoint list to include all 6 REST endpoints from Iteration 6 and the 3 WebSocket message keys from Iteration 7/8.
+- **Duplicate / Legacy Code** - note that `demoVoltages()` is still present but its call site has been removed.
 
 ### 7. Update `serial-controller-plan.md`
 

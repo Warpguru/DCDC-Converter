@@ -47,8 +47,8 @@
 
         <!--
           com.serial Logger: Single logger for all application code.
-          - Console: plain %msg%n, INFO and above — human-readable program output.
-          - File: full detail, ALL levels — complete diagnostic record (includes DEBUG Modbus annotations).
+          - Console: plain %msg%n, INFO and above - human-readable program output.
+          - File: full detail, ALL levels - complete diagnostic record (includes DEBUG Modbus annotations).
         -->
         <Logger name="com.serial" level="ALL" additivity="false">
             <AppenderRef ref="ConsoleAppender">

@@ -35,9 +35,10 @@ import io.javalin.websocket.WsMessageContext;
  * keys are recognised (unrecognised keys are silently ignored at DEBUG level):
  * </p>
  * <ul>
- * <li>{@code setCurrent}  — {@code double} — current setpoint in amperes</li>
- * <li>{@code setVoltage}  — {@code double} — voltage setpoint in volts</li>
- * <li>{@code setOutput}   — {@code boolean} — {@code true} to enable output, {@code false} to disable</li>
+ * <li>{@code setCurrent}  - {@code double} - current setpoint in amperes</li>
+ * <li>{@code setVoltage}  - {@code double} - voltage setpoint in volts</li>
+ * <li>{@code setOutput}   - {@code boolean} - {@code true} to enable output, {@code false} to disable</li>
+ * <li>{@code setKeypad}   - {@code boolean} - {@code true} to lock keypad, {@code false} to unlock</li>
  * </ul>
  *
  * <p>
@@ -53,6 +54,18 @@ public class WebSocketService {
 
     /** Broadcast interval in milliseconds. */
     private static final int BROADCAST_INTERVAL_MS = 1000;
+
+    /** WebSocket message key - current setpoint (double, amperes). */
+    private static final String KEY_SET_CURRENT = "setCurrent";
+
+    /** WebSocket message key - voltage setpoint (double, volts). */
+    private static final String KEY_SET_VOLTAGE = "setVoltage";
+
+    /** WebSocket message key - output enable state (boolean). */
+    private static final String KEY_SET_OUTPUT = "setOutput";
+
+    /** WebSocket message key - keypad lock state (boolean). */
+    private static final String KEY_SET_KEYPAD = "setKeypad";
 
     private final DeviceService deviceService;
     private final ObjectMapper objectMapper;
@@ -109,7 +122,7 @@ public class WebSocketService {
     }
 
     // -------------------------------------------------------------------------
-    // WebSocket event handlers — wired from SerialControllerApp
+    // WebSocket event handlers - wired from SerialControllerApp
     // -------------------------------------------------------------------------
 
     /**
@@ -127,7 +140,7 @@ public class WebSocketService {
      *
      * <p>
      * Parses the incoming JSON and dispatches to the appropriate {@link DeviceService} write
-     * method. Recognised keys: {@code setCurrent}, {@code setVoltage}, {@code setOutput}.
+     * method. Recognised keys: {@code setCurrent}, {@code setVoltage}, {@code setOutput}, {@code setKeypad}.
      * Unrecognised keys are logged at DEBUG level and ignored.
      * </p>
      *
@@ -140,8 +153,8 @@ public class WebSocketService {
         try {
             java.util.Map<String, Object> json = objectMapper.readValue(msg, java.util.Map.class);
 
-            if (json.containsKey("setCurrent")) {
-                double value = ((Number) json.get("setCurrent")).doubleValue();
+            if (json.containsKey(KEY_SET_CURRENT)) {
+                double value = ((Number) json.get(KEY_SET_CURRENT)).doubleValue();
                 try {
                     deviceService.setCurrent(value);
                 } catch (IllegalArgumentException e) {
@@ -151,8 +164,8 @@ public class WebSocketService {
                 }
             }
 
-            if (json.containsKey("setVoltage")) {
-                double value = ((Number) json.get("setVoltage")).doubleValue();
+            if (json.containsKey(KEY_SET_VOLTAGE)) {
+                double value = ((Number) json.get(KEY_SET_VOLTAGE)).doubleValue();
                 try {
                     deviceService.setVoltage(value);
                 } catch (IllegalArgumentException e) {
@@ -162,8 +175,8 @@ public class WebSocketService {
                 }
             }
 
-            if (json.containsKey("setOutput")) {
-                boolean value = (Boolean) json.get("setOutput");
+            if (json.containsKey(KEY_SET_OUTPUT)) {
+                boolean value = (Boolean) json.get(KEY_SET_OUTPUT);
                 try {
                     deviceService.setOutput(value);
                 } catch (Exception e) {
@@ -171,10 +184,20 @@ public class WebSocketService {
                 }
             }
 
+            if (json.containsKey(KEY_SET_KEYPAD)) {
+                boolean value = (Boolean) json.get(KEY_SET_KEYPAD);
+                try {
+                    deviceService.setKeypad(value);
+                } catch (Exception e) {
+                    logger.warn("setKeypad failed: {}", e.getMessage());
+                }
+            }
+
             // Log unrecognised keys at DEBUG so they are visible when debugging but do not clutter INFO logs.
             for (String key : json.keySet()) {
-                if (!key.equals("setCurrent") && !key.equals("setVoltage") && !key.equals("setOutput")) {
-                    logger.debug("WebSocket message: unrecognised key '{}' — ignored.", key);
+                if (!key.equals(KEY_SET_CURRENT) && !key.equals(KEY_SET_VOLTAGE)
+                        && !key.equals(KEY_SET_OUTPUT) && !key.equals(KEY_SET_KEYPAD)) {
+                    logger.debug("WebSocket message: unrecognised key '{}' - ignored.", key);
                 }
             }
 
@@ -215,7 +238,7 @@ public class WebSocketService {
     }
 
     // -------------------------------------------------------------------------
-    // Private — broadcast loop
+    // Private - broadcast loop
     // -------------------------------------------------------------------------
 
     /**

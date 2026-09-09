@@ -59,7 +59,7 @@ Response `204`: voltage applied successfully.
 Response `400`: plain-text range error message.
 Response `503`: no device connected.
 
-> **Note:** `PUT` is used (not `POST`) because the operation is idempotent — sending the same voltage value twice has the same effect.
+> **Note:** `PUT` is used (not `POST`) because the operation is idempotent - sending the same voltage value twice has the same effect.
 
 #### `PUT /api/current`
 Request body: `{"current": 2.0}`
@@ -84,7 +84,7 @@ Calls `deviceService.clearProtection()`.
 Response `204`: protection cleared successfully.
 Response `503`: no device connected.
 
-#### `POST /api/exit` *(extra — beyond original spec)*
+#### `POST /api/exit` *(extra - beyond original spec)*
 No request body. Requires HTTP Basic Authentication.
 
 Credentials read from `serial-controller.properties` next to the JAR (`exit.username`, `exit.password`). Triggers a clean application shutdown after committing the response.

@@ -216,6 +216,19 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
         return (readInt(LOCK) == ModbusConstants.STATE_ON);
     }
 
+    /**
+     * Returns the regulation mode.
+     *
+     * <p>Register {@link RidenRegistersRD60xx#REG_MODE}: 0 = CV, 1 = CC.</p>
+     *
+     * @return {@code true} for CV mode, {@code false} for CC mode
+     * @throws Exception if reading the register fails
+     */
+    @Override
+    public boolean isCvMode() throws Exception {
+        return (readInt(MODE) == 0);
+    }
+
     @Override
     public double getTemperatureCelsius() throws Exception {
         return read(TEMP_CELSIUS);

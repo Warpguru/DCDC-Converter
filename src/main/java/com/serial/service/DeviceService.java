@@ -28,7 +28,7 @@ import com.serial.modbus.ModbusConstants;
  * </ol>
  *
  * <p>
- * <strong>Threading model:</strong> Only one application-owned background thread exists — the Modbus poller.
+ * <strong>Threading model:</strong> Only one application-owned background thread exists - the Modbus poller.
  * All write methods ({@link #setVoltage}, {@link #setCurrent}, {@link #setOutput}, {@link #clearProtection})
  * and the poll method are {@code synchronized} on this instance. This prevents concurrent serial port access
  * and maps directly to a FreeRTOS mutex in the planned ESP32 C port. No Java-specific concurrency abstractions
@@ -48,6 +48,15 @@ public class DeviceService {
     /** Properties file directory on the classpath. */
     private static final String DEVICES_PATH = "/devices/";
 
+    /** Properties key for the converter topology value. */
+    private static final String PROP_TOPOLOGY = "device.topology";
+
+    /**
+     * Dropout voltage in volts subtracted from Vin to derive the effective maximum output voltage
+     * for {@link ConverterTopology#BUCK} converters.
+     */
+    private static final double BUCK_DROPOUT_V = 1.0;
+
     /** Polling interval in milliseconds. */
     private static final int POLL_INTERVAL_MS = 1000;
 
@@ -57,7 +66,7 @@ public class DeviceService {
      * <p>
      * A single instance is created here and shared with {@link WebSocketService} and
      * {@link RestService}. {@code ObjectMapper} is thread-safe after configuration and
-     * expensive to construct — one instance per application is the correct pattern.
+     * expensive to construct - one instance per application is the correct pattern.
      * </p>
      */
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -73,6 +82,57 @@ public class DeviceService {
 
     /** Set to {@code false} to signal the polling thread to stop. */
     private volatile boolean running;
+
+    /**
+     * Number of consecutive <em>non-timeout</em> poll failures that triggers a transport reconnect
+     * and sets the device Offline.
+     *
+     * <p>
+     * Serial timeouts bypass this counter and go Offline immediately because a timeout is
+     * unambiguous evidence that the device stopped responding (see {@link #poll()}).
+     * </p>
+     */
+    private static final int MAX_CONSECUTIVE_FAILURES = 3;
+
+    /**
+     * Number of consecutive fully-successful poll cycles required before the device is declared
+     * Online again after having been Offline.
+     *
+     * <p>
+     * Set to 1: once a reconnect succeeds and the first full poll completes without error, the
+     * device is communicating normally. There is no benefit to waiting for additional confirmations
+     * because a completed poll already validates every register read in the cycle.
+     * </p>
+     */
+    private static final int MAX_CONSECUTIVE_SUCCESSES = 1;
+
+    /**
+     * Exception message fragment thrown by {@link com.serial.modbus.ModbusTransport} when the
+     * serial read times out. Used to distinguish a timeout from other poll failures.
+     */
+    private static final String ERR_SERIAL_TIMEOUT = "Serial timeout";
+
+    /**
+     * Number of consecutive poll failures since the last successful poll.
+     *
+     * <p>
+     * Incremented on each non-timeout failed poll; reset to zero on a full success. When it
+     * reaches {@link #MAX_CONSECUTIVE_FAILURES} a transport reconnect is attempted and
+     * {@link ConverterState#setDeviceOnline(boolean)} is set to {@code false}.
+     * Serial timeouts skip this counter and trigger an immediate Offline + reconnect.
+     * </p>
+     */
+    private int consecutiveFailures;
+
+    /**
+     * Number of consecutive fully-successful poll cycles since the device went Offline.
+     *
+     * <p>
+     * Only counted while the device is Offline. When it reaches {@link #MAX_CONSECUTIVE_SUCCESSES}
+     * the device is declared Online and this counter is reset.
+     * </p>
+     */
+    private int consecutiveSuccesses;
 
     /**
      * Constructs a new {@code DeviceService}, detects the converter on the given port, loads its capability
@@ -136,7 +196,7 @@ public class DeviceService {
      *
      * <p>
      * The returned instance is the live object updated by the polling thread. Callers may read any field
-     * directly — all fields are {@code volatile}. No lock is needed for reads.
+     * directly - all fields are {@code volatile}. No lock is needed for reads.
      * </p>
      *
      * @return the current converter state
@@ -170,7 +230,7 @@ public class DeviceService {
     }
 
     // -------------------------------------------------------------------------
-    // Write operations (synchronized — one at a time, no overlap with poll)
+    // Write operations (synchronized - one at a time, no overlap with poll)
     // -------------------------------------------------------------------------
 
     /**
@@ -192,9 +252,10 @@ public class DeviceService {
      * @throws Exception                if the Modbus write fails
      */
     public synchronized void setVoltage(final double volts) throws Exception {
-        validateRange("Voltage", volts, state.getMinVoltage(), state.getMaxVoltage());
+        final double effectiveMax = effectiveMaxVoltage();
+        validateRange("Voltage", volts, state.getMinVoltage(), effectiveMax);
         logger.info("Setting voltage to {} V", volts);
-        converter.setVoltageVerified(volts);
+        converter.setVoltage(volts);
         state.setVoltageSet(volts);
     }
 
@@ -212,7 +273,7 @@ public class DeviceService {
     public synchronized void setCurrent(final double amperes) throws Exception {
         validateRange("Current", amperes, state.getMinCurrent(), state.getMaxCurrent());
         logger.info("Setting current to {} A", amperes);
-        converter.setCurrentVerified(amperes);
+        converter.setCurrent(amperes);
         state.setCurrentSet(amperes);
     }
 
@@ -257,7 +318,7 @@ public class DeviceService {
     }
 
     // -------------------------------------------------------------------------
-    // Private — device detection
+    // Private - device detection
     // -------------------------------------------------------------------------
 
     /**
@@ -304,7 +365,7 @@ public class DeviceService {
     }
 
     // -------------------------------------------------------------------------
-    // Private — limits loading
+    // Private - limits loading
     // -------------------------------------------------------------------------
 
     /**
@@ -322,7 +383,7 @@ public class DeviceService {
      */
     private void loadLimits() {
         if (converter == null) {
-            logger.warn("No device detected — skipping limits load. All limits remain at 0.");
+            logger.warn("No device detected - skipping limits load. All limits remain at 0.");
             return;
         }
 
@@ -340,7 +401,7 @@ public class DeviceService {
         }
 
         if (deviceName == null) {
-            logger.warn("Could not determine device name — skipping limits load.");
+            logger.warn("Could not determine device name - skipping limits load.");
             return;
         }
 
@@ -361,9 +422,11 @@ public class DeviceService {
             state.setMaxCurrent(parseDouble(props, "device.maxCurrent", 0.0));
             state.setMinCurrent(parseDouble(props, "device.minCurrent", 0.0));
             state.setMaxPower(parseDouble(props, "device.maxPower", 0.0));
+            state.setConverterTopology(parseTopology(props));
 
-            logger.info("Device limits loaded: {} {} | V=[{}, {}] A=[{}, {}] P_max={}W",
+            logger.info("Device limits loaded: {} {} | topology={} V=[{}, {}] A=[{}, {}] P_max={}W",
                     state.getManufacturer(), state.getDeviceName(),
+                    state.getConverterTopology(),
                     state.getMinVoltage(), state.getMaxVoltage(),
                     state.getMinCurrent(), state.getMaxCurrent(),
                     state.getMaxPower());
@@ -384,19 +447,19 @@ public class DeviceService {
     private double parseDouble(final Properties props, final String key, final double defaultValue) {
         String value = props.getProperty(key);
         if (value == null) {
-            logger.warn("Property '{}' not found in device properties file — using default {}", key, defaultValue);
+            logger.warn("Property '{}' not found in device properties file - using default {}", key, defaultValue);
             return defaultValue;
         }
         try {
             return Double.parseDouble(value.trim());
         } catch (NumberFormatException e) {
-            logger.warn("Cannot parse property '{}' value '{}' as double — using default {}", key, value, defaultValue);
+            logger.warn("Cannot parse property '{}' value '{}' as double - using default {}", key, value, defaultValue);
             return defaultValue;
         }
     }
 
     // -------------------------------------------------------------------------
-    // Private — initial setpoint read
+    // Private - initial setpoint read
     // -------------------------------------------------------------------------
 
     /**
@@ -422,7 +485,7 @@ public class DeviceService {
     }
 
     // -------------------------------------------------------------------------
-    // Private — polling loop
+    // Private - polling loop
     // -------------------------------------------------------------------------
 
     /**
@@ -479,14 +542,70 @@ public class DeviceService {
             state.setOutputEnabled(converter.getOutput());
             state.setKeypadLocked(converter.getKeypad());
             state.setProtectionState(converter.getProtectionState() ? 1 : 0);
+            state.setCvMode(converter.isCvMode());
 
-            // Setpoints — polled to detect front-panel changes
+            // Setpoints - polled to detect front-panel changes
             // Note: getVoltage() reads VOUT (measured); we need VSET.
-            // DC2DCConverter does not expose getVoltageSet() — read it via the cast.
+            // DC2DCConverter does not expose getVoltageSet() - read it via the cast.
             readSetpoints();
 
+            // Poll succeeded - update online tracking.
+            consecutiveFailures = 0;
+            if (!state.isDeviceOnline()) {
+                // Device is currently Offline: one clean poll is enough to declare Online.
+                consecutiveSuccesses++;
+                if (consecutiveSuccesses >= MAX_CONSECUTIVE_SUCCESSES) {
+                    consecutiveSuccesses = 0;
+                    logger.info("Device communication restored - marking Online.");
+                    state.setDeviceOnline(true);
+                }
+            } else {
+                // Device is Online: a success is expected; just reset the success counter.
+                consecutiveSuccesses = 0;
+            }
+
         } catch (Exception e) {
-            logger.warn("Poll cycle failed: {}", e.getMessage());
+            consecutiveSuccesses = 0;
+            final boolean isTimeout = e.getMessage() != null && e.getMessage().contains(ERR_SERIAL_TIMEOUT);
+            if (isTimeout) {
+                // A serial timeout means the device stopped responding - go Offline immediately.
+                logger.warn("Serial timeout - marking Offline and attempting reconnect.");
+                consecutiveFailures = 0;
+                state.setDeviceOnline(false);
+                attemptReconnect();
+            } else {
+                consecutiveFailures++;
+                logger.warn("Poll cycle failed ({}/{}): {}", consecutiveFailures, MAX_CONSECUTIVE_FAILURES, e.getMessage());
+                if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                    state.setDeviceOnline(false);
+                    attemptReconnect();
+                    consecutiveFailures = 0;
+                }
+            }
+        }
+    }
+
+    /**
+     * Attempts to close and reopen the serial transport after repeated poll failures.
+     *
+     * <p>
+     * Modbus RTU defines no session-layer reconnect mechanism. After a USB-serial adapter is
+     * physically disconnected, jSerialComm's {@link SerialPort} object becomes invalid and the
+     * only correct recovery is to discard it and open a fresh one.  This method delegates to
+     * {@link DC2DCConverter#reconnect()} which in turn calls {@link com.serial.modbus.ModbusTransport#reconnect()}.
+     * </p>
+     *
+     * <p>
+     * If the reconnect itself fails the error is logged and the next poll cycle will try again.
+     * </p>
+     */
+    private void attemptReconnect() {
+        logger.warn("Attempting serial port reconnect.");
+        try {
+            converter.reconnect();
+            logger.info("Serial port reconnect succeeded.");
+        } catch (Exception ex) {
+            logger.warn("Serial port reconnect failed: {}", ex.getMessage());
         }
     }
 
@@ -514,8 +633,54 @@ public class DeviceService {
     }
 
     // -------------------------------------------------------------------------
-    // Private — validation
+    // Private - validation
     // -------------------------------------------------------------------------
+
+    /**
+     * Returns the effective maximum voltage setpoint for the current device and input voltage.
+     *
+     * <p>
+     * For {@link ConverterTopology#BUCK} converters the ceiling is
+     * {@code min(maxVoltage, voltageIn − BUCK_DROPOUT_V)}, because the device silently ignores
+     * setpoints above that value. For all other topologies the static {@code maxVoltage} limit
+     * is returned unchanged.
+     * </p>
+     *
+     * @return effective maximum voltage in volts
+     */
+    private double effectiveMaxVoltage() {
+        if (state.getConverterTopology() == ConverterTopology.BUCK) {
+            final double buckCeiling = state.getVoltageIn() - BUCK_DROPOUT_V;
+            return Math.min(state.getMaxVoltage(), buckCeiling);
+        }
+        return state.getMaxVoltage();
+    }
+
+    /**
+     * Parses the {@code device.topology} property into a {@link ConverterTopology} enum constant.
+     *
+     * <p>
+     * If the property is absent or its value does not match any constant name (case-insensitive),
+     * a warning is logged and {@link ConverterTopology#BUCK_BOOST} is returned as the safe default
+     * (no restriction).
+     * </p>
+     *
+     * @param props the loaded device properties
+     * @return the topology, never {@code null}
+     */
+    private ConverterTopology parseTopology(final Properties props) {
+        final String raw = props.getProperty(PROP_TOPOLOGY);
+        if (raw == null) {
+            logger.warn("Property '{}' not found — defaulting to {}", PROP_TOPOLOGY, ConverterTopology.BUCK_BOOST);
+            return ConverterTopology.BUCK_BOOST;
+        }
+        try {
+            return ConverterTopology.valueOf(raw.trim().toUpperCase().replace('/', '_').replace('-', '_'));
+        } catch (IllegalArgumentException e) {
+            logger.warn("Unknown topology value '{}' — defaulting to {}", raw, ConverterTopology.BUCK_BOOST);
+            return ConverterTopology.BUCK_BOOST;
+        }
+    }
 
     /**
      * Validates that a value is within the given range (inclusive).
@@ -532,4 +697,5 @@ public class DeviceService {
                     String.format("%s out of range: %.3f (min=%.3f, max=%.3f)", name, value, min, max));
         }
     }
+    
 }

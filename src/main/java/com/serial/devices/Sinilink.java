@@ -28,6 +28,8 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
 
     public static final DeviceRegister ISET = new DeviceRegister("Current Setpoint", "A", SinilinkRegisters.REG_ISET, 1000);
 
+    public static final DeviceRegister MODE = new DeviceRegister("Regulation Mode", null, SinilinkRegisters.REG_MODE);
+
     public static final DeviceRegister VOUT = new DeviceRegister("Output Voltage", "V", SinilinkRegisters.REG_VOUT, 100);
 
     public static final DeviceRegister IOUT = new DeviceRegister("Output Current", "A", SinilinkRegisters.REG_IOUT, 1000);
@@ -209,6 +211,21 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
     @Override
     public boolean getKeypad() throws Exception {
         return (readInt(LOCK) == ModbusConstants.STATE_ON);
+    }
+
+    /**
+     * Returns the regulation mode by reading {@link SinilinkRegisters#REG_MODE}.
+     *
+     * <p>
+     * Register value: {@code 0} = CV (constant voltage), {@code 1} = CC (constant current).
+     * </p>
+     *
+     * @return {@code true} if the device is in CV mode, {@code false} if in CC mode
+     * @throws Exception if reading the register fails
+     */
+    @Override
+    public boolean isCvMode() throws Exception {
+        return (readInt(MODE) == 0);
     }
 
     public int getHardwareVersion() throws Exception {

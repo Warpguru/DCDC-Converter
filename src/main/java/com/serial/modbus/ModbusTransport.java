@@ -23,15 +23,18 @@ public class ModbusTransport {
 
     /** {@link SerialPort} device name the {@code Modbus} device is connected to. */
     private final String portName;
-    
+
+    /** Baud rate used when the port was opened; required for reconnection. */
+    private final int baud;
+
     /** {@link SerialPort} the {@code Modbus} device is connected to. */
-    private final SerialPort port;
+    private SerialPort port;
 
     /** {@link InputStream} reading from {@link ModbusTransport#port}. */
-    private final InputStream in;
+    private InputStream in;
 
     /** {@link InputStream} writing to {@link ModbusTransport#port}. */
-    private final OutputStream out;
+    private OutputStream out;
 
     /**
      * Constructor.
@@ -42,14 +45,8 @@ public class ModbusTransport {
      */
     public ModbusTransport(final String portName, final int baud) throws Exception {
         this.portName = portName;
-        port = SerialPort.getCommPort(portName);
-        port.setComPortParameters(baud, ModbusConstants.DATABITS_8, SerialPort.ONE_STOP_BIT, SerialPort.NO_PARITY);
-        port.setComPortTimeouts(SerialPort.TIMEOUT_READ_BLOCKING, ModbusConstants.READ_TIMEOUT_MS,
-                ModbusConstants.WRITE_TIMEOUT_MS);
-        if (!port.openPort())
-            throw new RuntimeException("Cannot open serial port");
-        in = port.getInputStream();
-        out = port.getOutputStream();
+        this.baud = baud;
+        openPort();
     }
 
     /**
@@ -66,6 +63,44 @@ public class ModbusTransport {
      */
     public void close() {
         port.closePort();
+    }
+
+    /**
+     * Closes and re-opens the serial port at the same baud rate.
+     *
+     * <p>
+     * Called by {@link com.serial.device.ModbusDevice#reconnect()} after consecutive poll failures,
+     * which indicates the USB-serial adapter was unplugged and re-plugged. jSerialComm requires a
+     * fresh {@link SerialPort} object after a physical disconnect; the existing object cannot be
+     * re-opened.
+     * </p>
+     *
+     * @throws Exception if the port cannot be re-opened
+     */
+    public void reconnect() throws Exception {
+        try {
+            port.closePort();
+        } catch (Exception ignored) {
+            // Already closed or invalid - proceed.
+        }
+        openPort();
+        logger.info("Serial port {} re-opened at {} baud.", portName, baud);
+    }
+
+    /**
+     * Opens the serial port and obtains the I/O streams.
+     *
+     * @throws Exception if the port cannot be opened
+     */
+    private void openPort() throws Exception {
+        port = SerialPort.getCommPort(portName);
+        port.setComPortParameters(baud, ModbusConstants.DATABITS_8, SerialPort.ONE_STOP_BIT, SerialPort.NO_PARITY);
+        port.setComPortTimeouts(SerialPort.TIMEOUT_READ_BLOCKING, ModbusConstants.READ_TIMEOUT_MS,
+                ModbusConstants.WRITE_TIMEOUT_MS);
+        if (!port.openPort())
+            throw new RuntimeException("Cannot open serial port: " + portName);
+        in = port.getInputStream();
+        out = port.getOutputStream();
     }
 
     /**
@@ -233,13 +268,13 @@ public class ModbusTransport {
      */
     @Deprecated
     void log(final String dir, final byte[] data, final String hint) {
-        // First line: raw hex bytes at INFO — always visible.
+        // First line: raw hex bytes at INFO - always visible.
         StringBuilder sb = new StringBuilder(dir).append("  ");
         for (byte b : data)
             sb.append(String.format("%02X ", b));
         logger.info(sb.toString());
 
-        // Second line: human-readable annotation at DEBUG — visible only when debug is enabled.
+        // Second line: human-readable annotation at DEBUG - visible only when debug is enabled.
         String auto = decodeFrame(dir, data);
         if (auto != null || hint != null) {
             StringBuilder detail = new StringBuilder("    -> ");
@@ -288,12 +323,12 @@ public class ModbusTransport {
                 }
             }
         } else {
-            // RX: fc=0x03 read response — [slave][0x03][byteCount][val_hi][val_lo][crc×2]
+            // RX: fc=0x03 read response - [slave][0x03][byteCount][val_hi][val_lo][crc×2]
             if (fc == ModbusFunctionCodes.READ_HOLDING_REGISTERS && data.length == 7) {
                 int val = ((data[3] & 0xFF) << 8) | (data[4] & 0xFF);
                 return String.format("Value = %d (0x%04X)", val, val);
             }
-            // RX: fc=0x06 write echo — same layout as TX
+            // RX: fc=0x06 write echo - same layout as TX
             if (fc == ModbusFunctionCodes.WRITE_SINGLE_REGISTER && data.length >= 6) {
                 int reg = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
                 String regName = DeviceRegister.REGISTRY.getOrDefault(reg, String.format("0x%04X", reg));
