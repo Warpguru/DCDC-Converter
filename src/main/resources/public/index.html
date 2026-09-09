@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XY6008 — Live Monitor</title>
+    <title>Serial Controller</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -13,335 +13,714 @@
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            padding: 2rem 1rem;
-        }
-        h1 {
-            font-size: 1.6rem;
-            font-weight: 600;
-            margin-bottom: 1.5rem;
-            color: #00d4ff;
-            letter-spacing: .5px;
+            align-items: stretch;
+            padding: .75rem 1rem;
         }
 
-        /* Connection status badge */
-        #status {
-            display: inline-flex;
-            align-items: center;
-            gap: .5rem;
-            padding: .35rem .9rem;
-            border-radius: 999px;
-            font-size: .8rem;
-            font-weight: 600;
-            margin-bottom: 1.5rem;
+        /* Header line: title + badges on one row */
+        .header {
+            display: flex; align-items: center; gap: .6rem;
+            flex-wrap: wrap; margin-bottom: .75rem;
         }
-        #status .dot {
-            width: 8px; height: 8px;
-            border-radius: 50%;
+        h1 { font-size: 1.4rem; font-weight: 600; color: #00d4ff; letter-spacing: .5px; }
+
+        /* Status badges (WS connection + device online) */
+        .badge {
+            display: inline-flex; align-items: center; gap: .4rem;
+            padding: .2rem .65rem; border-radius: 999px;
+            font-size: .72rem; font-weight: 600;
         }
+        .badge .dot { width: 7px; height: 7px; border-radius: 50%; }
         #status.connected      { background: rgba(0,200,83,.15); color: #00c853; }
         #status.connected .dot { background: #00c853; }
         #status.disconnected      { background: rgba(255,82,82,.15); color: #ff5252; }
         #status.disconnected .dot { background: #ff5252; }
+        #deviceOnline.online      { background: rgba(0,200,83,.15); color: #00c853; }
+        #deviceOnline.online .dot { background: #00c853; }
+        #deviceOnline.offline     { background: rgba(255,82,82,.15); color: #ff5252; }
+        #deviceOnline.offline .dot{ background: #ff5252; }
 
-        /* Data cards */
-        .cards {
-            display: flex;
-            gap: 1.5rem;
-            flex-wrap: wrap;
-            justify-content: center;
-            margin-bottom: 2rem;
+        /* Shared flex row - cards, toggle row, controls row all use this */
+        .row {
+            display: flex; gap: .75rem; flex-wrap: wrap;
+            margin-bottom: .75rem; width: 100%;
         }
+
+        /* Measurement cards */
         .card {
-            background: #16213e;
-            border: 1px solid #0f3460;
-            border-radius: 12px;
-            padding: 1.5rem 2.5rem;
-            text-align: center;
-            min-width: 180px;
+            background: #16213e; border: 1px solid #0f3460;
+            border-radius: 8px; padding: .6rem 1rem; text-align: center;
+            flex: 1 1 120px;
         }
-        .card .label {
-            font-size: .75rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #7f8fa6;
-            margin-bottom: .4rem;
-        }
-        .card .value {
-            font-size: 2.4rem;
-            font-weight: 700;
-            font-variant-numeric: tabular-nums;
-        }
-        .card .unit { font-size: 1rem; color: #7f8fa6; }
+        .card .label { font-size: .7rem; text-transform: uppercase; letter-spacing: .8px; color: #7f8fa6; margin-bottom: .15rem; }
+        .card .value { font-size: 1.7rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .card .unit  { font-size: .8rem; color: #7f8fa6; }
         #voltageCard .value { color: #00d4ff; }
         #currentCard .value { color: #ffc107; }
+        #powerCard   .value { color: #c8a2f5; }
+        #vinCard     .value { color: #7ecb9e; }
 
-        /* Current control panel */
+        /* Row-2 panels: toggle buttons + info cards - all same flex basis */
+        .toggle-panel, .info-panel {
+            background: #16213e; border: 1px solid #0f3460; border-radius: 8px;
+            padding: .5rem .75rem; text-align: center; flex: 1 1 120px;
+            display: flex; flex-direction: column; align-items: center; gap: .35rem;
+        }
+        .toggle-panel .label, .info-panel .label {
+            font-size: .7rem; text-transform: uppercase; letter-spacing: .8px; color: #7f8fa6;
+        }
+        /* Info panel: two-column table inside */
+        .info-panel table { border-collapse: collapse; width: 100%; }
+        .info-panel td { padding: .15rem .3rem; font-size: .8rem; text-align: left; }
+        .info-panel td:first-child { color: #7f8fa6; font-size: .7rem; text-transform: uppercase; letter-spacing: .5px; width: 55%; }
+        .info-panel td:last-child { font-weight: 600; }
+        .toggle-btn {
+            padding: .35rem 1rem; border-radius: 6px; border: 2px solid #0f3460;
+            background: #1a1a2e; color: #e0e0e0; font-size: .85rem; font-weight: 700;
+            cursor: pointer; transition: background .15s, border-color .15s; width: 100%;
+        }
+        .toggle-btn.on  { background: rgba(0,200,83,.2);  border-color: #00c853; color: #00c853; }
+        .toggle-btn.off { background: rgba(255,82,82,.15); border-color: #ff5252; color: #ff5252; }
+        .toggle-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+        /* Control panels (set voltage / set current) */
         .control-panel {
-            background: #16213e;
-            border: 1px solid #0f3460;
-            border-radius: 12px;
-            padding: 1.5rem 2.5rem;
-            text-align: center;
-            min-width: 320px;
-            margin-bottom: 2rem;
+            background: #16213e; border: 1px solid #0f3460; border-radius: 8px;
+            padding: .6rem .75rem; text-align: center; flex: 1 1 260px;
         }
-        .control-panel .label {
-            font-size: .75rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #7f8fa6;
-            margin-bottom: .8rem;
-        }
-        .control-panel .readout {
-            font-size: 2.4rem;
-            font-weight: 700;
-            font-variant-numeric: tabular-nums;
-            color: #ffc107;
-            margin-bottom: .6rem;
-        }
-        .control-panel .readout .unit {
-            font-size: 1rem;
-            color: #7f8fa6;
-        }
-        .control-row {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            justify-content: center;
-        }
+        .control-panel .label { font-size: .7rem; text-transform: uppercase; letter-spacing: .8px; color: #7f8fa6; margin-bottom: .3rem; }
+        .control-panel .readout { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-bottom: .3rem; }
+        .control-row { display: flex; align-items: center; gap: .6rem; justify-content: center; }
         .control-btn {
-            width: 40px; height: 40px;
-            border: 1px solid #0f3460;
-            border-radius: 8px;
-            background: #1a1a2e;
-            color: #ffc107;
-            font-size: 1.4rem;
-            font-weight: 700;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background .15s, border-color .15s;
-            user-select: none;
+            width: 34px; height: 34px; border: 1px solid #0f3460; border-radius: 6px;
+            background: #1a1a2e; font-size: 1.2rem; font-weight: 700; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: background .15s, border-color .15s; user-select: none;
         }
-        .control-btn:hover:not(:disabled) {
-            background: #0f3460;
-            border-color: #ffc107;
-        }
-        .control-btn:disabled {
-            opacity: .35;
-            cursor: not-allowed;
-        }
-        /* Custom range slider */
-        #currentSlider {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 200px;
-            height: 6px;
-            border-radius: 3px;
-            background: #0f3460;
-            outline: none;
-        }
-        #currentSlider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 20px; height: 20px;
-            border-radius: 50%;
-            background: #ffc107;
-            cursor: pointer;
-            border: 2px solid #16213e;
-            box-shadow: 0 0 6px rgba(255,193,7,.4);
-        }
-        #currentSlider::-moz-range-thumb {
-            width: 20px; height: 20px;
-            border-radius: 50%;
-            background: #ffc107;
-            cursor: pointer;
-            border: 2px solid #16213e;
-        }
-        #currentSlider:disabled {
-            opacity: .35;
-        }
+        .control-btn:hover:not(:disabled) { background: #0f3460; }
+        .control-btn:disabled { opacity: .35; cursor: not-allowed; }
+        #voltageReadout { color: #00d4ff; }
+        #currentReadout { color: #ffc107; }
+        #voltagePanel .control-btn { color: #00d4ff; }
+        #currentPanel .control-btn { color: #ffc107; }
 
-        /* Message log */
+        /* Numeric entry fields */
+        .entry-row { display: flex; align-items: center; gap: .5rem; justify-content: center; margin-top: .35rem; }
+        .entry-field {
+            width: 90px; padding: .35rem .6rem; border-radius: 6px;
+            border: 1px solid #0f3460; background: #0f0f23; color: #e0e0e0;
+            font-size: .95rem; font-variant-numeric: tabular-nums; text-align: right;
+            outline: none; transition: border-color .15s;
+        }
+        .entry-field:focus { border-color: #7f8fa6; }
+        .entry-field:disabled { opacity: .35; cursor: not-allowed; }
+        #voltageEntry:focus { border-color: #00d4ff; }
+        #currentEntry:focus { border-color: #ffc107; }
+        .entry-hint { font-size: .72rem; color: #7f8fa6; }
+
+        /* Sliders */
+        .slider-wrap { position: relative; flex: 1; min-width: 80px; display: flex; align-items: center; }
+        .slider-wrap canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+        input[type=range] {
+            -webkit-appearance: none; appearance: none;
+            width: 100%; height: 5px; border-radius: 3px; background: transparent; outline: none;
+            position: relative; z-index: 1;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 20px; height: 20px; border-radius: 50%; cursor: pointer; border: 2px solid #16213e;
+        }
+        #voltageSlider::-webkit-slider-thumb { background: #00d4ff; box-shadow: 0 0 6px rgba(0,212,255,.4); }
+        #currentSlider::-webkit-slider-thumb { background: #ffc107; box-shadow: 0 0 6px rgba(255,193,7,.4); }
+        #voltageSlider::-moz-range-thumb { width:20px;height:20px;border-radius:50%;background:#00d4ff;cursor:pointer;border:2px solid #16213e; }
+        #currentSlider::-moz-range-thumb { width:20px;height:20px;border-radius:50%;background:#ffc107;cursor:pointer;border:2px solid #16213e; }
+        input[type=range]:disabled { opacity: .35; }
+
+        .ok   { color: #00c853; }
+        .warn { color: #ff5252; }
+
+        /* Message log - collapsible, full width */
         .log-section {
-            width: 100%;
-            max-width: 600px;
+            width: 100%; margin-top: .25rem;
+            background: #16213e; border: 1px solid #0f3460; border-radius: 8px;
+            overflow: hidden;
         }
-        .log-section h2 {
-            font-size: .85rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #7f8fa6;
-            margin-bottom: .5rem;
+        .log-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: .65rem 1rem; cursor: pointer; user-select: none;
         }
+        .log-header:hover { background: rgba(255,255,255,.03); }
+        .log-title { font-size: .85rem; text-transform: uppercase; letter-spacing: 1px; color: #7f8fa6; }
+        .log-chevron {
+            font-size: .8rem; color: #7f8fa6; transition: transform .2s;
+            display: inline-block; line-height: 1;
+        }
+        .log-chevron.open { transform: rotate(180deg); }
+        #logBody { display: none; border-top: 1px solid #0f3460; padding: .75rem 1rem; }
+        #logBody.open { display: block; }
         #log {
-            list-style: none;
-            background: #0f0f23;
-            border: 1px solid #0f3460;
-            border-radius: 8px;
-            padding: .75rem 1rem;
-            max-height: 240px;
-            overflow-y: auto;
-            font-family: 'Consolas', 'Courier New', monospace;
-            font-size: .78rem;
-            line-height: 1.6;
-            color: #a0a0c0;
+            list-style: none; max-height: 200px; overflow-y: auto;
+            font-family: 'Consolas', 'Courier New', monospace; font-size: .78rem; line-height: 1.6; color: #a0a0c0;
         }
         #log li { white-space: nowrap; }
     </style>
 </head>
 <body>
 
-    <h1>XY6008 Live Monitor</h1>
-
-    <div id="status" class="disconnected">
-        <span class="dot"></span>
-        <span id="statusText">Disconnected</span>
+    <div class="header">
+        <h1 id="pageTitle">Serial Controller - Live Monitor</h1>
+        <div id="status" class="badge disconnected">
+            <span class="dot"></span>
+            <span id="statusText">Disconnected</span>
+        </div>
+        <div id="deviceOnline" class="badge offline">
+            <span class="dot"></span>
+            <span id="deviceOnlineText">Offline</span>
+        </div>
     </div>
 
-    <div class="cards">
+    <!-- Row 1: Measured values -->
+    <div class="row">
         <div class="card" id="voltageCard">
-            <div class="label">Voltage</div>
-            <div><span class="value" id="voltage">—</span> <span class="unit">V</span></div>
+            <div class="label">Output Voltage</div>
+            <div><span class="value" id="voltageOut">-</span> <span class="unit">V</span></div>
         </div>
         <div class="card" id="currentCard">
-            <div class="label">Current</div>
-            <div><span class="value" id="current">—</span> <span class="unit">A</span></div>
+            <div class="label">Output Current</div>
+            <div><span class="value" id="currentOut">-</span> <span class="unit">A</span></div>
+        </div>
+        <div class="card" id="powerCard">
+            <div class="label">Output Power</div>
+            <div><span class="value" id="powerOut">-</span> <span class="unit">W</span></div>
+        </div>
+        <div class="card" id="vinCard">
+            <div class="label">Input Voltage</div>
+            <div><span class="value" id="voltageIn">-</span> <span class="unit">V</span></div>
         </div>
     </div>
 
-    <!-- Current Control Widget -->
-    <div class="control-panel" id="currentControlPanel">
-        <div class="label">Set Current</div>
-        <div class="readout"><span id="currentReadout">2.00</span> <span class="unit">A</span></div>
-        <div class="control-row">
-            <button class="control-btn" id="btnDecrement" title="−0.1 A" disabled>−</button>
-            <input type="range" id="currentSlider" min="0" max="2" step="0.1" value="2" disabled>
-            <button class="control-btn" id="btnIncrement" title="+0.1 A" disabled>+</button>
+    <!-- Row 2: Output toggle, Keypad toggle, Mode+Protection info, Temp+Keypad info -->
+    <div class="row">
+        <div class="toggle-panel">
+            <div class="label">Output</div>
+            <button id="outputBtn" class="toggle-btn" disabled>-</button>
+        </div>
+        <div class="toggle-panel">
+            <div class="label">Keypad Lock</div>
+            <button id="keypadBtn" class="toggle-btn" disabled>-</button>
+        </div>
+        <div class="info-panel">
+            <div class="label">Status</div>
+            <table>
+                <tr><td>Mode</td>       <td id="cvMode">-</td></tr>
+                <tr><td>Protection</td> <td id="protectionState">-</td></tr>
+            </table>
+        </div>
+        <div class="info-panel">
+            <div class="label">Sensor</div>
+            <table>
+                <tr><td>Temperature</td> <td id="tempCelsius">-</td></tr>
+                <tr><td>Keypad</td>      <td id="keypadLocked">-</td></tr>
+            </table>
         </div>
     </div>
 
+    <!-- Row 3: Set Voltage and Set Current side-by-side -->
+    <div class="row">
+        <div class="control-panel" id="voltagePanel">
+            <div class="label">Set Voltage</div>
+            <div class="readout"><span id="voltageReadout">-</span> <span style="font-size:1rem;color:#7f8fa6">V</span></div>
+            <div class="control-row">
+                <button class="control-btn" id="btnVoltDec" title="-0.1 V" disabled>−</button>
+                <div class="slider-wrap">
+                    <canvas id="voltageTickCanvas"></canvas>
+                    <input type="range" id="voltageSlider" min="0" max="60" step="0.1" value="0" disabled>
+                </div>
+                <button class="control-btn" id="btnVoltInc" title="+0.1 V" disabled>+</button>
+            </div>
+            <div class="entry-row">
+                <input type="number" id="voltageEntry" class="entry-field" min="0" max="60" step="0.01"
+                       placeholder="V" title="Type a voltage and press Enter" disabled>
+                <span class="entry-hint">V - press Enter</span>
+            </div>
+        </div>
+
+        <div class="control-panel" id="currentPanel">
+            <div class="label">Set Current</div>
+            <div class="readout"><span id="currentReadout">-</span> <span style="font-size:1rem;color:#7f8fa6">A</span></div>
+            <div class="control-row">
+                <button class="control-btn" id="btnCurrDec" title="-0.1 A" disabled>−</button>
+                <div class="slider-wrap">
+                    <canvas id="currentTickCanvas"></canvas>
+                    <input type="range" id="currentSlider" min="0" max="20" step="0.1" value="0" disabled>
+                </div>
+                <button class="control-btn" id="btnCurrInc" title="+0.1 A" disabled>+</button>
+            </div>
+            <div class="entry-row">
+                <input type="number" id="currentEntry" class="entry-field" min="0" max="20" step="0.01"
+                       placeholder="A" title="Type a current and press Enter" disabled>
+                <span class="entry-hint">A - press Enter</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Message log - collapsible -->
     <div class="log-section">
-        <h2>Message Log</h2>
-        <ul id="log"></ul>
+        <div class="log-header" id="logToggle">
+            <span class="log-title">Message Log</span>
+            <span class="log-chevron" id="logChevron">&#9660;</span>
+        </div>
+        <div id="logBody">
+            <ul id="log"></ul>
+        </div>
     </div>
 
     <script>
-        const statusEl   = document.getElementById('status');
-        const statusText = document.getElementById('statusText');
-        const voltageEl  = document.getElementById('voltage');
-        const currentEl  = document.getElementById('current');
-        const logEl      = document.getElementById('log');
-        const MAX_LOG    = 20;
+        /* ---- DOM refs ---- */
+        const pageTitleEl      = document.getElementById('pageTitle');
+        const statusEl         = document.getElementById('status');
+        const statusText       = document.getElementById('statusText');
+        const deviceOnlineEl   = document.getElementById('deviceOnline');
+        const deviceOnlineText = document.getElementById('deviceOnlineText');
+        const voltageOutEl     = document.getElementById('voltageOut');
+        const currentOutEl     = document.getElementById('currentOut');
+        const powerOutEl       = document.getElementById('powerOut');
+        const voltageInEl      = document.getElementById('voltageIn');
+        const cvModeEl         = document.getElementById('cvMode');
+        const protectionEl     = document.getElementById('protectionState');
+        const tempEl           = document.getElementById('tempCelsius');
+        const keypadEl         = document.getElementById('keypadLocked');
+        const voltageReadout   = document.getElementById('voltageReadout');
+        const voltageSlider    = document.getElementById('voltageSlider');
+        const voltageEntry     = document.getElementById('voltageEntry');
+        const btnVoltDec       = document.getElementById('btnVoltDec');
+        const btnVoltInc       = document.getElementById('btnVoltInc');
+        const currentReadout   = document.getElementById('currentReadout');
+        const currentSlider    = document.getElementById('currentSlider');
+        const currentEntry     = document.getElementById('currentEntry');
+        const btnCurrDec       = document.getElementById('btnCurrDec');
+        const btnCurrInc       = document.getElementById('btnCurrInc');
+        const outputBtn        = document.getElementById('outputBtn');
+        const keypadBtn        = document.getElementById('keypadBtn');
+        const logEl            = document.getElementById('log');
 
-        // Current-control elements
-        const slider       = document.getElementById('currentSlider');
-        const readout      = document.getElementById('currentReadout');
-        const btnDec       = document.getElementById('btnDecrement');
-        const btnInc       = document.getElementById('btnIncrement');
-        let   currentSetting = 2.00;
+        const MAX_LOG = 20;
+        const STEP    = 0.1;
 
-        let ws;
-        let reconnectDelay = 1000; // ms, doubles on each failure
+        /* ---- Topology constants (must match ConverterTopology enum names) ---- */
+        const TOPOLOGY_BUCK       = 'BUCK';
+        const TOPOLOGY_BOOST      = 'BOOST';
+        const TOPOLOGY_BUCK_BOOST = 'BUCK_BOOST';
 
-        /* ---- Current-control helpers ---- */
+        /* ---- Tick canvas refs ---- */
+        const voltageTickCanvas = document.getElementById('voltageTickCanvas');
+        const currentTickCanvas = document.getElementById('currentTickCanvas');
 
-        function updateCurrentUI() {
-            readout.textContent = currentSetting.toFixed(2);
-            slider.value = currentSetting;
+        /* ---- Shared state (mirrors last received ConverterState) ---- */
+        let voltageSetting      = 0;
+        let currentSetting      = 0;
+        let outputEnabled       = false;
+        let keypadLocked        = false;
+        let limitsApplied       = false;
+        let converterTopology   = TOPOLOGY_BUCK_BOOST;  /* updated from first WS message */
+        let lastVoltageIn       = null;                 /* last received voltageIn value */
+        let staticMaxVoltage    = 60;                   /* maxVoltage from properties (never changes) */
+
+        /* ---- Slider tick marks ---- */
+        /**
+         * Draws integer-step tick marks on a canvas overlaid behind a range slider.
+         * Ticks are drawn at every whole-unit value within [min, max].
+         * If vinLimit is a finite number within [min, max] an additional amber marker is drawn there.
+         *
+         * The canvas is sized to match its wrapper via CSS (width:100%, height:100%).
+         * Device pixel ratio is handled so marks are crisp on HiDPI screens.
+         *
+         * @param {HTMLCanvasElement} canvas
+         * @param {number} min   slider minimum
+         * @param {number} max   slider maximum
+         * @param {number|null} vinLimit  position of the Vin-1V marker, or null to omit
+         */
+        function drawTicks(canvas, min, max, vinLimit) {
+            var wrap = canvas.parentElement;
+            var dpr  = window.devicePixelRatio || 1;
+            var w    = wrap.clientWidth;
+            var h    = wrap.clientHeight || 24;
+            if (w === 0) return;
+            canvas.width  = w * dpr;
+            canvas.height = h * dpr;
+            var ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            ctx.clearRect(0, 0, w, h);
+
+            /* The native range slider track does not occupy the full element width —
+               the thumb is centred at the track ends, so usable track is inset by
+               half a thumb-width (10 px) on each side. */
+            var PAD  = 10;
+            var span = w - 2 * PAD;
+            var mid  = h / 2;
+
+            /* Draw the track background so it remains visible under the canvas */
+            ctx.beginPath();
+            ctx.roundRect(PAD, mid - 2.5, span, 5, 3);
+            ctx.fillStyle = '#0f3460';
+            ctx.fill();
+
+            /* Integer tick marks */
+            var range = max - min;
+            for (var v = Math.ceil(min); v <= max; v++) {
+                var x = PAD + (v - min) / range * span;
+                ctx.beginPath();
+                ctx.moveTo(x, mid - 7);
+                ctx.lineTo(x, mid + 7);
+                ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+
+            /* Vin − 1 V marker (amber, only for buck converters) */
+            if (vinLimit !== null && isFinite(vinLimit) && vinLimit >= min && vinLimit <= max) {
+                var xv = PAD + (vinLimit - min) / range * span;
+                ctx.beginPath();
+                ctx.moveTo(xv, mid - 9);
+                ctx.lineTo(xv, mid + 9);
+                ctx.strokeStyle = '#ffa000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
         }
 
-        function sendCurrentSetting() {
+        /* Returns the Buck voltage ceiling (Vin − 1 V), or null if not applicable. */
+        function buckCeiling() {
+            if (converterTopology === TOPOLOGY_BUCK && lastVoltageIn !== null) {
+                return Math.min(staticMaxVoltage, lastVoltageIn - 1);
+            }
+            return null;
+        }
+
+        function redrawVoltageTicks() {
+            var min = parseFloat(voltageSlider.min);
+            var max = staticMaxVoltage;
+            var vinLimit = (converterTopology === TOPOLOGY_BUCK && lastVoltageIn !== null)
+                           ? (lastVoltageIn - 1) : null;
+            drawTicks(voltageTickCanvas, min, max, vinLimit);
+        }
+
+        function redrawCurrentTicks() {
+            var min = parseFloat(currentSlider.min);
+            var max = parseFloat(currentSlider.max);
+            drawTicks(currentTickCanvas, min, max, null);
+        }
+
+        /* Redraw on window resize */
+        window.addEventListener('resize', function () {
+            redrawVoltageTicks();
+            redrawCurrentTicks();
+        });
+
+        /* ---- Protection code → label ---- */
+        const PROT = { 0:'OK', 1:'OVP', 2:'OCP', 3:'OPP', 4:'LVP', 5:'OAH', 6:'OHP', 7:'OTP' };
+        function protLabel(code) { return PROT[code] !== undefined ? PROT[code] : 'ERR ' + code; }
+
+        /* ---- Log toggle ---- */
+        document.getElementById('logToggle').addEventListener('click', function () {
+            var body    = document.getElementById('logBody');
+            var chevron = document.getElementById('logChevron');
+            var open    = body.classList.toggle('open');
+            chevron.classList.toggle('open', open);
+        });
+
+        /* ---- Control helpers ---- */
+        function setControlsEnabled(on) {
+            voltageSlider.disabled = !on;
+            voltageEntry.disabled  = !on;
+            btnVoltDec.disabled    = !on;
+            btnVoltInc.disabled    = !on;
+            currentSlider.disabled = !on;
+            currentEntry.disabled  = !on;
+            btnCurrDec.disabled    = !on;
+            btnCurrInc.disabled    = !on;
+            outputBtn.disabled     = !on;
+            keypadBtn.disabled     = !on;
+        }
+
+        function updateVoltageUI() {
+            voltageReadout.textContent = voltageSetting.toFixed(2);
+            voltageSlider.value = voltageSetting;
+            if (document.activeElement !== voltageEntry) {
+                voltageEntry.value = voltageSetting.toFixed(2);
+            }
+        }
+
+        function updateCurrentUI() {
+            currentReadout.textContent = currentSetting.toFixed(2);
+            currentSlider.value = currentSetting;
+            if (document.activeElement !== currentEntry) {
+                currentEntry.value = currentSetting.toFixed(2);
+            }
+        }
+
+        function updateOutputUI() {
+            if (outputEnabled) {
+                outputBtn.textContent = 'On';
+                outputBtn.className = 'toggle-btn on';
+            } else {
+                outputBtn.textContent = 'Off';
+                outputBtn.className = 'toggle-btn off';
+            }
+        }
+
+        function updateKeypadUI() {
+            if (keypadLocked) {
+                keypadBtn.textContent = 'Locked';
+                keypadBtn.className = 'toggle-btn on';
+            } else {
+                keypadBtn.textContent = 'Unlocked';
+                keypadBtn.className = 'toggle-btn off';
+            }
+        }
+
+        /* ---- Send helpers ---- */
+        function sendVoltage() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ setVoltage: voltageSetting }));
+                addLog('⚡ Set voltage → ' + voltageSetting.toFixed(2) + ' V');
+            }
+        }
+
+        function sendCurrent() {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ setCurrent: currentSetting }));
                 addLog('⚡ Set current → ' + currentSetting.toFixed(2) + ' A');
             }
         }
 
-        function setControlsEnabled(enabled) {
-            slider.disabled  = !enabled;
-            btnDec.disabled  = !enabled;
-            btnInc.disabled  = !enabled;
-        }
-
-        slider.addEventListener('input', function () {
-            currentSetting = parseFloat(slider.value);
-            updateCurrentUI();
-            sendCurrentSetting();
+        /* ---- Voltage controls ---- */
+        voltageSlider.addEventListener('change', function () {
+            var v = parseFloat(voltageSlider.value);
+            var ceil = buckCeiling();
+            if (ceil !== null && v > ceil) {
+                /* Snap thumb back to ceiling — do not send the over-limit value. */
+                voltageSetting = +ceil.toFixed(2);
+                updateVoltageUI();
+            } else {
+                voltageSetting = +v.toFixed(2);
+                updateVoltageUI();
+                sendVoltage();
+            }
+            voltageSlider.blur();
+        });
+        btnVoltDec.addEventListener('click', function () {
+            voltageSetting = Math.max(parseFloat(voltageSlider.min), +(voltageSetting - STEP).toFixed(2));
+            updateVoltageUI(); sendVoltage();
+        });
+        btnVoltInc.addEventListener('click', function () {
+            var ceil = buckCeiling();
+            var max  = ceil !== null ? ceil : staticMaxVoltage;
+            voltageSetting = Math.min(max, +(voltageSetting + STEP).toFixed(2));
+            updateVoltageUI(); sendVoltage();
+        });
+        voltageEntry.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                var v    = parseFloat(voltageEntry.value);
+                var ceil = buckCeiling();
+                if (!isNaN(v) && (ceil === null || v <= ceil) && v >= parseFloat(voltageSlider.min)) {
+                    voltageSetting = +v.toFixed(2);
+                    updateVoltageUI();
+                    sendVoltage();
+                } else {
+                    /* Invalid or over-ceiling — reset field to last accepted value. */
+                    voltageEntry.value = voltageSetting.toFixed(2);
+                }
+                voltageEntry.blur();
+            }
         });
 
-        btnDec.addEventListener('click', function () {
-            currentSetting = Math.max(0, +(currentSetting - 0.1).toFixed(1));
+        /* ---- Current controls ---- */
+        currentSlider.addEventListener('change', function () {
+            currentSetting = parseFloat(currentSlider.value);
             updateCurrentUI();
-            sendCurrentSetting();
+            sendCurrent();
+            currentSlider.blur();
+        });
+        btnCurrDec.addEventListener('click', function () {
+            currentSetting = Math.max(parseFloat(currentSlider.min), +(currentSetting - STEP).toFixed(2));
+            updateCurrentUI(); sendCurrent();
+        });
+        btnCurrInc.addEventListener('click', function () {
+            currentSetting = Math.min(parseFloat(currentSlider.max), +(currentSetting + STEP).toFixed(2));
+            updateCurrentUI(); sendCurrent();
+        });
+        currentEntry.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                var v = parseFloat(currentEntry.value);
+                if (!isNaN(v)) {
+                    currentSetting = Math.min(parseFloat(currentSlider.max),
+                                     Math.max(parseFloat(currentSlider.min), +v.toFixed(2)));
+                    updateCurrentUI();
+                    sendCurrent();
+                }
+                currentEntry.blur();
+            }
         });
 
-        btnInc.addEventListener('click', function () {
-            currentSetting = Math.min(2, +(currentSetting + 0.1).toFixed(1));
-            updateCurrentUI();
-            sendCurrentSetting();
+        /* ---- Output toggle ---- */
+        outputBtn.addEventListener('click', function () {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                var next = !outputEnabled;
+                ws.send(JSON.stringify({ setOutput: next }));
+                addLog('⚡ Set output → ' + (next ? 'ON' : 'OFF'));
+            }
+        });
+
+        /* ---- Keypad toggle ---- */
+        keypadBtn.addEventListener('click', function () {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                var next = !keypadLocked;
+                ws.send(JSON.stringify({ setKeypad: next }));
+                addLog('⚡ Set keypad → ' + (next ? 'LOCKED' : 'UNLOCKED'));
+            }
         });
 
         /* ---- WebSocket ---- */
+        var ws;
+        var reconnectDelay = 1000;
 
         function connect() {
-            const wsUrl = 'ws://' + window.location.host + '/ws/data';
+            var wsUrl = 'ws://' + window.location.host + '/ws/data';
             ws = new WebSocket(wsUrl);
 
             ws.onopen = function () {
                 reconnectDelay = 1000;
-                statusEl.className = 'connected';
+                statusEl.className = 'badge connected';
                 statusText.textContent = 'Connected';
                 setControlsEnabled(true);
-                addLog('🟢 Connected to ' + wsUrl);
-                // Send current setting immediately on connect
-                sendCurrentSetting();
+                addLog('Connected to ' + wsUrl);
             };
 
             ws.onmessage = function (event) {
                 try {
-                    const data = JSON.parse(event.data);
-                    if (data.voltage !== undefined) voltageEl.textContent = data.voltage.toFixed(2);
-                    if (data.current !== undefined) currentEl.textContent = data.current.toFixed(2);
+                    var d = JSON.parse(event.data);
+
+                    /* Measured values */
+                    if (d.voltageOut         !== undefined) voltageOutEl.textContent = d.voltageOut.toFixed(2);
+                    if (d.currentOut         !== undefined) currentOutEl.textContent = d.currentOut.toFixed(2);
+                    if (d.powerOut           !== undefined) powerOutEl.textContent   = d.powerOut.toFixed(2);
+                    if (d.voltageIn          !== undefined) voltageInEl.textContent  = d.voltageIn.toFixed(2);
+                    if (d.temperatureCelsius !== undefined) tempEl.textContent       = d.temperatureCelsius.toFixed(1) + ' °C';
+                    if (d.cvMode             !== undefined) cvModeEl.textContent     = d.cvMode ? 'CV' : 'CC';
+
+                    /* Keypad status row (read-only display in table) */
+                    if (d.keypadLocked !== undefined) {
+                        keypadEl.textContent = d.keypadLocked ? 'Locked' : 'Unlocked';
+                    }
+
+                    /* Protection state */
+                    if (d.protectionState !== undefined) {
+                        var label = protLabel(d.protectionState);
+                        protectionEl.textContent = label;
+                        protectionEl.className   = (d.protectionState === 0) ? 'ok' : 'warn';
+                    }
+
+                    /* Device limits - apply once on first message with valid limits */
+                    if (!limitsApplied && d.maxVoltage !== undefined && d.maxVoltage > 0) {
+                        staticMaxVoltage   = d.maxVoltage;
+                        voltageSlider.min  = d.minVoltage  !== undefined ? d.minVoltage  : 0;
+                        voltageSlider.max  = d.maxVoltage;
+                        voltageEntry.min   = voltageSlider.min;
+                        voltageEntry.max   = voltageSlider.max;
+                        currentSlider.min  = d.minCurrent  !== undefined ? d.minCurrent  : 0;
+                        currentSlider.max  = d.maxCurrent  !== undefined ? d.maxCurrent  : 20;
+                        currentEntry.min   = currentSlider.min;
+                        currentEntry.max   = currentSlider.max;
+                        limitsApplied = true;
+                        redrawVoltageTicks();
+                        redrawCurrentTicks();
+                    }
+
+                    /* Topology — determines whether a Vin-derived ceiling applies */
+                    if (d.converterTopology !== undefined) {
+                        converterTopology = d.converterTopology;
+                    }
+
+                    /* Device identity - merge into page title */
+                    if (d.manufacturer !== undefined && d.deviceName !== undefined
+                            && d.manufacturer !== 'Unknown' && d.deviceName !== 'Unknown') {
+                        pageTitleEl.textContent = d.manufacturer + ' ' + d.deviceName + ' - Live Monitor';
+                        document.title = d.manufacturer + ' ' + d.deviceName;
+                    }
+
+                    /* Vin - update amber buck-limit marker */
+                    if (d.voltageIn !== undefined) {
+                        lastVoltageIn = d.voltageIn;
+                        if (limitsApplied) redrawVoltageTicks();
+                    }
+
+                    /* Setpoints - update UI only when neither the slider nor the entry field is focused */
+                    if (d.voltageSet !== undefined
+                            && document.activeElement !== voltageSlider
+                            && document.activeElement !== voltageEntry) {
+                        voltageSetting = d.voltageSet;
+                        updateVoltageUI();
+                    }
+                    if (d.currentSet !== undefined
+                            && document.activeElement !== currentSlider
+                            && document.activeElement !== currentEntry) {
+                        currentSetting = d.currentSet;
+                        updateCurrentUI();
+                    }
+
+                    /* Output state */
+                    if (d.outputEnabled !== undefined) {
+                        outputEnabled = d.outputEnabled;
+                        updateOutputUI();
+                    }
+
+                    /* Keypad state (toggle button) */
+                    if (d.keypadLocked !== undefined) {
+                        keypadLocked = d.keypadLocked;
+                        updateKeypadUI();
+                    }
+
+                    /* Device online/offline state */
+                    if (d.deviceOnline !== undefined) {
+                        if (d.deviceOnline) {
+                            deviceOnlineEl.className = 'badge online';
+                            deviceOnlineText.textContent = 'Online';
+                        } else {
+                            deviceOnlineEl.className = 'badge offline';
+                            deviceOnlineText.textContent = 'Offline';
+                        }
+                    }
+
                     addLog(event.data);
+
                 } catch (e) {
-                    addLog('⚠ Non-JSON: ' + event.data);
+                    addLog('Non-JSON: ' + event.data);
                 }
             };
 
             ws.onclose = function () {
-                statusEl.className = 'disconnected';
+                statusEl.className = 'badge disconnected';
                 statusText.textContent = 'Disconnected';
                 setControlsEnabled(false);
-                addLog('🔴 Disconnected — reconnecting in ' + (reconnectDelay / 1000) + 's');
-                scheduleReconnect();
+                addLog('Disconnected - reconnecting in ' + (reconnectDelay / 1000) + 's');
+                setTimeout(function () {
+                    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+                    connect();
+                }, reconnectDelay);
             };
 
-            ws.onerror = function () {
-                ws.close(); // triggers onclose → reconnect
-            };
-        }
-
-        function scheduleReconnect() {
-            setTimeout(function () {
-                reconnectDelay = Math.min(reconnectDelay * 2, 30000);
-                connect();
-            }, reconnectDelay);
+            ws.onerror = function () { ws.close(); };
         }
 
         function addLog(msg) {
-            const li = document.createElement('li');
-            const ts = new Date().toLocaleTimeString();
+            var li = document.createElement('li');
+            var ts = new Date().toLocaleTimeString();
             li.textContent = ts + '  ' + msg;
             logEl.prepend(li);
-            while (logEl.children.length > MAX_LOG) {
-                logEl.removeChild(logEl.lastChild);
-            }
+            while (logEl.children.length > MAX_LOG) logEl.removeChild(logEl.lastChild);
         }
 
-        // Start connection on page load
         connect();
     </script>
 </body>

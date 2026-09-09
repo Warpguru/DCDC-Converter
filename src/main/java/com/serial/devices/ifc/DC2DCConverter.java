@@ -139,5 +139,25 @@ public interface DC2DCConverter {
      * @throws Exception if reading from the device fails
      */
     public boolean getKeypad() throws Exception;
-    
+
+    /**
+     * Returns the regulation mode.
+     *
+     * @return {@code true} for CV (constant voltage), {@code false} for CC (constant current)
+     * @throws Exception if reading from the device fails
+     */
+    public boolean isCvMode() throws Exception;
+
+    /**
+     * Closes and re-opens the serial transport at the same port and baud rate.
+     *
+     * <p>
+     * Called after consecutive poll failures to recover from a USB-serial adapter
+     * being physically disconnected and reconnected.
+     * </p>
+     *
+     * @throws Exception if the transport cannot be re-opened
+     */
+    public void reconnect() throws Exception;
+
 }

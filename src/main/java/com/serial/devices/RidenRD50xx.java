@@ -26,13 +26,13 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
 
     public static final DeviceRegister VSET = new DeviceRegister("Voltage Setpoint", "V", RidenRegistersRD50xx.REG_VSET, 100);
 
-    public static final DeviceRegister ISET = new DeviceRegister("Current Setpoint", "A", RidenRegistersRD50xx.REG_ISET, 1000);
+    public static final DeviceRegister ISET = new DeviceRegister("Current Setpoint", "A", RidenRegistersRD50xx.REG_ISET, 100);
 
     public static final DeviceRegister VOUT = new DeviceRegister("Output Voltage", "V", RidenRegistersRD50xx.REG_VOUT, 100);
 
-    public static final DeviceRegister IOUT = new DeviceRegister("Output Current", "A", RidenRegistersRD50xx.REG_IOUT, 1000);
+    public static final DeviceRegister IOUT = new DeviceRegister("Output Current", "A", RidenRegistersRD50xx.REG_IOUT, 100);
 
-    public static final DeviceRegister POUT = new DeviceRegister("Output Power", "W", RidenRegistersRD50xx.REG_POUT, 1000);
+    public static final DeviceRegister POUT = new DeviceRegister("Output Power", "W", RidenRegistersRD50xx.REG_POUT, 100);
 
     public static final DeviceRegister VIN = new DeviceRegister("Voltage Input", "V", RidenRegistersRD50xx.REG_VIN, 100);
 
@@ -227,6 +227,19 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
     @Override
     public boolean getKeypad() throws Exception {
         return (readInt(LOCK) == ModbusConstants.STATE_ON);
+    }
+
+    /**
+     * Returns the regulation mode.
+     *
+     * <p>Register {@link RidenRegistersRD50xx#REG_MODE}: 0 = CV, 1 = CC.</p>
+     *
+     * @return {@code true} for CV mode, {@code false} for CC mode
+     * @throws Exception if reading the register fails
+     */
+    @Override
+    public boolean isCvMode() throws Exception {
+        return (readInt(MODE) == 0);
     }
 
     public void setPreset(final int preset) throws Exception {

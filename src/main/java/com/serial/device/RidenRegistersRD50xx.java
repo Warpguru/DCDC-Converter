@@ -35,13 +35,13 @@ public final class RidenRegistersRD50xx {
     /** Voltage setpoint (V * 100) */
     public static final int REG_VSET = 0x0000;
 
-    /** Current setpoint (A * 1000) */
+    /** Current setpoint (A * 100) */
     public static final int REG_ISET = 0x0001;
 
     /** Measured output voltage (V * 100) */
     public static final int REG_VOUT = 0x0002;
 
-    /** Measured output current (A * 1000) */
+    /** Measured output current (A * 100) */
     public static final int REG_IOUT = 0x0003;
 
     /** Output power (W * 100) */

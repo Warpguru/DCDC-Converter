@@ -97,13 +97,30 @@ public abstract class ModbusDevice {
     
     /**
      * Retrieve {@code SerialPort} device name used with Modbus protocol.
-     * 
+     *
      * @return {@code portName}
      */
     public String getPortName() {
         return portName;
     }
-    
+
+    /**
+     * Closes and re-opens the serial transport at the same port and baud rate.
+     *
+     * <p>
+     * Delegates to {@link ModbusTransport#reconnect()}. Called by {@link com.serial.service.DeviceService}
+     * after a configurable number of consecutive poll failures, which indicates the USB-to-serial
+     * adapter was physically disconnected and reconnected.
+     * </p>
+     *
+     * @throws Exception if the transport cannot be re-opened
+     */
+    public void reconnect() throws Exception {
+        if (transport != null) {
+            transport.reconnect();
+        }
+    }
+
     /**
      * Check if a known {@code Modbus} device was found on {@code SerialPort}.
      * 

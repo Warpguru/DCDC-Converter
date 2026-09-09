@@ -10,7 +10,7 @@ The device capability limits (maxVoltage, maxCurrent, maxPower, etc.) will be re
 
 ## Scope
 
-This iteration is **Java / service-layer only** — no changes to `index.html` and no new REST endpoints.
+This iteration is **Java / service-layer only** - no changes to `index.html` and no new REST endpoints.
 
 ## Tasks
 
@@ -21,27 +21,27 @@ File: `src/main/java/com/serial/service/ConverterState.java`
 `ConverterState` is the thread-safe holder of all converter state. It contains three groups of fields:
 
 **Measured values** (updated by the polling thread in `DeviceService`):
-- `double voltageOut` — measured output voltage (V)
-- `double currentOut` — measured output current (A)
-- `double powerOut` — measured output power (W)
-- `double voltageIn` — measured input voltage (V)
-- `double temperatureCelsius` — internal temperature (°C)
-- `boolean outputEnabled` — current output on/off state
-- `int protectionState` — current protection state code (0 = normal; see `SinilinkRegisters` for codes)
-- `boolean cvMode` — `true` = CV (constant voltage), `false` = CC (constant current)
+- `double voltageOut` - measured output voltage (V)
+- `double currentOut` - measured output current (A)
+- `double powerOut` - measured output power (W)
+- `double voltageIn` - measured input voltage (V)
+- `double temperatureCelsius` - internal temperature (°C)
+- `boolean outputEnabled` - current output on/off state
+- `int protectionState` - current protection state code (0 = normal; see `SinilinkRegisters` for codes)
+- `boolean cvMode` - `true` = CV (constant voltage), `false` = CC (constant current)
 
 **Setpoints** (written by the user via WebPage or REST):
-- `double voltageSet` — voltage setpoint (V)
-- `double currentSet` — current setpoint (A)
+- `double voltageSet` - voltage setpoint (V)
+- `double currentSet` - current setpoint (A)
 
 **Device limits** (read-only after initialisation from properties file):
-- `String deviceName` — e.g. `"XY6008"`, `"RD5020"`
-- `String manufacturer` — e.g. `"Sinilink"`, `"Riden"`
-- `double maxVoltage` — maximum output voltage (V)
-- `double minVoltage` — minimum output voltage (V)
-- `double maxCurrent` — maximum output current (A)
-- `double minCurrent` — minimum output current (A)
-- `double maxPower` — maximum output power (W)
+- `String deviceName` - e.g. `"XY6008"`, `"RD5020"`
+- `String manufacturer` - e.g. `"Sinilink"`, `"Riden"`
+- `double maxVoltage` - maximum output voltage (V)
+- `double minVoltage` - minimum output voltage (V)
+- `double maxCurrent` - maximum output current (A)
+- `double minCurrent` - minimum output current (A)
+- `double maxPower` - maximum output power (W)
 
 All mutable fields must be `volatile`. Provide full Javadoc. Provide getters and setters for all fields; setters for limits are package-private (only `DeviceService` sets them).
 
@@ -98,7 +98,7 @@ File: `src/main/java/com/serial/service/DeviceService.java`
 - Populating and maintaining `ConverterState`.
 - Running the background polling thread that reads **all** register values from the device every second and updates `ConverterState`.
 
-> **Note — Modbus RTU is strictly master/slave.** The device never transmits unsolicited data. When the user changes voltage or current using the physical buttons/wheel on the front panel, the device updates its internal registers silently. The PC discovers the change only on the next poll. There is no listener or interrupt mechanism available. The polling thread must therefore read both measured values **and** setpoints (VSET, ISET) every cycle, so that front-panel changes are reflected in `ConverterState` and propagated to the webpage and REST API automatically.
+> **Note - Modbus RTU is strictly master/slave.** The device never transmits unsolicited data. When the user changes voltage or current using the physical buttons/wheel on the front panel, the device updates its internal registers silently. The PC discovers the change only on the next poll. There is no listener or interrupt mechanism available. The polling thread must therefore read both measured values **and** setpoints (VSET, ISET) every cycle, so that front-panel changes are reflected in `ConverterState` and propagated to the webpage and REST API automatically.
 
 **Constructor:** `DeviceService(final String portName)`
 
@@ -110,34 +110,34 @@ On construction:
 
 **Threading model and ESP32 portability constraint:**
 
-> This application will eventually be ported to an ESP32, which has exactly two application tasks: one for the web server and one for device control. The Java threading model must reflect this constraint — no Java-specific concurrency abstractions (no `ExecutorService`, no `CompletableFuture`, no thread pools in the service layer).
+> This application will eventually be ported to an ESP32, which has exactly two application tasks: one for the web server and one for device control. The Java threading model must reflect this constraint - no Java-specific concurrency abstractions (no `ExecutorService`, no `CompletableFuture`, no thread pools in the service layer).
 >
-> The design uses **one application-owned background thread only** — the Modbus poller in `DeviceService`. Javalin's internal thread pool is outside our control and has no ESP32 equivalent, but the service layer must stay single-threaded on the device-control side.
+> The design uses **one application-owned background thread only** - the Modbus poller in `DeviceService`. Javalin's internal thread pool is outside our control and has no ESP32 equivalent, but the service layer must stay single-threaded on the device-control side.
 >
 > All write methods (`setVoltage`, `setCurrent`, `setOutput`, `clearProtection`) are `synchronized` on the `DeviceService` instance. This ensures writes from REST handlers or WebSocket message handlers never overlap with the poll cycle or with each other. In the ESP32 C port, `synchronized` maps directly to a FreeRTOS mutex (`xSemaphoreTake` / `xSemaphoreGive`).
 
 **Polling thread:** started by `DeviceService.start()`, called from `SerialControllerApp` after Javalin is up. The poll method is also `synchronized` on `DeviceService`. Every second, reads the following from the device and updates `ConverterState`:
 - Measured: `voltageOut`, `currentOut`, `powerOut`, `voltageIn`, `temperatureCelsius`, `outputEnabled`, `protectionState`, `cvMode`
-- Setpoints: `voltageSet`, `currentSet` — **must be polled** so that front-panel changes made directly on the device are picked up and reflected in the webpage and REST state.
+- Setpoints: `voltageSet`, `currentSet` - **must be polled** so that front-panel changes made directly on the device are picked up and reflected in the webpage and REST state.
 
 **Public API:**
-- `ConverterState getState()` — returns the `ConverterState` instance (read-only; no lock needed as all fields are `volatile`).
-- `synchronized void setVoltage(double volts)` — validates and writes; blocks poller until complete.
-- `synchronized void setCurrent(double amperes)` — validates and writes; blocks poller until complete.
-- `synchronized void setOutput(boolean on)` — writes; blocks poller until complete.
-- `synchronized void clearProtection()` — writes; blocks poller until complete.
-- `void start()` — starts the polling thread.
-- `void stop()` — stops the polling thread and closes the transport.
+- `ConverterState getState()` - returns the `ConverterState` instance (read-only; no lock needed as all fields are `volatile`).
+- `synchronized void setVoltage(double volts)` - validates and writes; blocks poller until complete.
+- `synchronized void setCurrent(double amperes)` - validates and writes; blocks poller until complete.
+- `synchronized void setOutput(boolean on)` - writes; blocks poller until complete.
+- `synchronized void clearProtection()` - writes; blocks poller until complete.
+- `void start()` - starts the polling thread.
+- `void stop()` - stops the polling thread and closes the transport.
 
 ### 4. Refactor `SerialControllerApp`
 
 File: `src/main/java/com/serial/SerialControllerApp.java`
 
 Remove from `SerialControllerApp`:
-- `private static volatile double currentSetting` — now in `ConverterState`.
-- `private static final ObjectMapper objectMapper` — move to `DeviceService` or `RestService`.
-- `private static final Set<WsContext> clients` — remains for now (moved in Iteration 7).
-- The inline device-detection call inside `demoVoltages()` — `demoVoltages()` stays `@Deprecated` and is **not called** from `process()` for now (gate it with a `false` condition or comment out the call — do not delete the method).
+- `private static volatile double currentSetting` - now in `ConverterState`.
+- `private static final ObjectMapper objectMapper` - move to `DeviceService` or `RestService`.
+- `private static final Set<WsContext> clients` - remains for now (moved in Iteration 7).
+- The inline device-detection call inside `demoVoltages()` - `demoVoltages()` stays `@Deprecated` and is **not called** from `process()` for now (gate it with a `false` condition or comment out the call - do not delete the method).
 
 Add to `SerialControllerApp`:
 - Instantiate `DeviceService` with the port argument from `args[0]`.

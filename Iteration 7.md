@@ -8,7 +8,7 @@ After Iterations 5 and 6, `DeviceService` owns the converter and `ConverterState
 
 ## Scope
 
-Java service layer and WebSocket handler refactor only. No changes to `index.html` in this iteration — the webpage already handles `voltage` and `current` JSON fields; the extended payload fields will be consumed in Iteration 8.
+Java service layer and WebSocket handler refactor only. No changes to `index.html` in this iteration - the webpage already handles `voltage` and `current` JSON fields; the extended payload fields will be consumed in Iteration 8.
 
 ## Tasks
 
@@ -23,7 +23,7 @@ Responsibilities:
 - Handle `onConnect`, `onMessage`, `onClose`, `onError` callbacks.
 - Run the background push thread (1-second interval) that serialises `deviceService.getState()` to JSON and broadcasts to all clients.
 
-**`onMessage` handling** — parse incoming JSON and act on the following keys (ignore unrecognised keys at DEBUG level, not WARN):
+**`onMessage` handling** - parse incoming JSON and act on the following keys (ignore unrecognised keys at DEBUG level, not WARN):
 
 | Key | Action |
 |---|---|
@@ -31,20 +31,20 @@ Responsibilities:
 | `setVoltage` | Validate and call `deviceService.setVoltage()` |
 | `setOutput` | Call `deviceService.setOutput()` |
 
-**Push thread** — replace the `Math.random()` simulation with:
+**Push thread** - replace the `Math.random()` simulation with:
 ```java
 String json = objectMapper.writeValueAsString(deviceService.getState());
 ```
 Broadcast to all clients. Handle send failures by removing the failing client from the set (existing pattern).
 
 **Public API:**
-- `void start()` — starts the push thread.
-- `void stop()` — interrupts the push thread.
-- `void onConnect(WsContext ctx)`, `void onMessage(WsMessageContext ctx)`, `void onClose(WsContext ctx)`, `void onError(WsErrorContext ctx)` — public handler methods called from `SerialControllerApp`.
+- `void start()` - starts the push thread.
+- `void stop()` - interrupts the push thread.
+- `void onConnect(WsContext ctx)`, `void onMessage(WsMessageContext ctx)`, `void onClose(WsContext ctx)`, `void onError(WsErrorContext ctx)` - public handler methods called from `SerialControllerApp`.
 
 ### 2. Add `ObjectMapper` to `DeviceService`
 
-`DeviceService` owns a single `ObjectMapper` instance (Jackson is expensive to construct — one instance per application). Expose it via `getObjectMapper()`. Both `RestService` and `WebSocketService` use this same instance.
+`DeviceService` owns a single `ObjectMapper` instance (Jackson is expensive to construct - one instance per application). Expose it via `getObjectMapper()`. Both `RestService` and `WebSocketService` use this same instance.
 
 ### 3. Refactor `SerialControllerApp`
 
@@ -68,7 +68,7 @@ config.routes.ws("/ws/data", ws -> {
 
 Call `webSocketService.start()` alongside `deviceService.start()`, and `webSocketService.stop()` alongside `deviceService.stop()`.
 
-After this refactor, `SerialControllerApp` contains only: logger, `main()`, `process()` (Javalin wiring — all routes delegated to service classes), `sleepSeconds()`, `printPortDetails()`, `valueOrNA()`, `demoVoltages()` (deprecated, call gated off).
+After this refactor, `SerialControllerApp` contains only: logger, `main()`, `process()` (Javalin wiring - all routes delegated to service classes), `sleepSeconds()`, `printPortDetails()`, `valueOrNA()`, `demoVoltages()` (deprecated, call gated off).
 
 ### 4. Build and Verification
 
@@ -78,15 +78,15 @@ java -jar target/SerialController.jar <port>
 ```
 
 Verify:
-- Browser at `http://localhost:8000` — voltage and current update every second with real device values (or zeros if no device attached).
+- Browser at `http://localhost:8000` - voltage and current update every second with real device values (or zeros if no device attached).
 - Moving the current slider sends `{"setCurrent": x.x}` and is reflected in the next server push.
-- `POST /api/current` via Postman changes `currentSet` — visible in the next WebSocket broadcast.
+- `POST /api/current` via Postman changes `currentSet` - visible in the next WebSocket broadcast.
 - `GET /api/state` returns `currentSet` matching the value set via the slider.
 
 ## Acceptance Criteria
 
 - `SerialControllerApp` contains no `clients`, `objectMapper`, `currentSetting`, or `startUpdateThread` declarations.
-- WebSocket `onMessage` routes `setCurrent`, `setVoltage`, `setOutput` through `DeviceService` — same code path as REST handlers.
+- WebSocket `onMessage` routes `setCurrent`, `setVoltage`, `setOutput` through `DeviceService` - same code path as REST handlers.
 - Push payload is the full `ConverterState` JSON serialised by Jackson.
 - A REST write is visible in the next WebSocket broadcast (shared state confirmed).
 - `mvn clean package` produces `target/SerialController.jar` with no errors.

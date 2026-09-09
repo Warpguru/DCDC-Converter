@@ -15,7 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Serial Controller Application — entry point.
+ * Serial Controller Application - entry point.
  *
  * <p>
  * This class is responsible only for wiring up the Javalin HTTP/WebSocket server and the service
@@ -26,23 +26,23 @@ import org.slf4j.LoggerFactory;
  * Iteration history:
  * </p>
  * <ul>
- * <li>Iteration 1 — proof of concept: serial port enumeration.</li>
- * <li>Iteration 2 — Javalin HTTP server + static index.html.</li>
- * <li>Iteration 3 — WebSocket live data push.</li>
- * <li>Iteration 4 — current control widget in the webpage.</li>
- * <li>Iteration 5 — service layer: {@link DeviceService}, {@link ConverterState}, device properties files.</li>
- * <li>Iteration 6 — {@link RestService}: full CRUD REST API with OpenAPI documentation.</li>
- * <li>Iteration 7 — {@link WebSocketService}: WebSocket handler extracted from app; full state push.</li>
+ * <li>Iteration 1 - proof of concept: serial port enumeration.</li>
+ * <li>Iteration 2 - Javalin HTTP server + static index.html.</li>
+ * <li>Iteration 3 - WebSocket live data push.</li>
+ * <li>Iteration 4 - current control widget in the webpage.</li>
+ * <li>Iteration 5 - service layer: {@link DeviceService}, {@link ConverterState}, device properties files.</li>
+ * <li>Iteration 6 - {@link RestService}: full CRUD REST API with OpenAPI documentation.</li>
+ * <li>Iteration 7 - {@link WebSocketService}: WebSocket handler extracted from app; full state push.</li>
  * </ul>
  */
 public class SerialControllerApp {
 
     private static final Logger logger = LoggerFactory.getLogger(SerialControllerApp.class);
 
-    /** The service layer — owns the converter, polling thread, and ConverterState. */
+    /** The service layer - owns the converter, polling thread, and ConverterState. */
     private DeviceService deviceService;
 
-    /** WebSocket service — owns connected clients and the broadcast thread. */
+    /** WebSocket service - owns connected clients and the broadcast thread. */
     private WebSocketService webSocketService;
 
     /**
@@ -78,12 +78,12 @@ public class SerialControllerApp {
             for (SerialPort serialPort : serialPorts) {
                 printPortDetails(serialPort);
             }
-            // NOTE: demoVoltages() is no longer called here — it opened its own ModbusTransport
+            // NOTE: demoVoltages() is no longer called here - it opened its own ModbusTransport
             // on every discovered port, which conflicts with DeviceService acquiring the transport
             // exclusively. Removed in Iteration 5; method body cleared, signature retained @Deprecated.
         }
 
-        // Initialise the service layer — detects device, loads limits, reads initial setpoints.
+        // Initialise the service layer - detects device, loads limits, reads initial setpoints.
         deviceService    = new DeviceService(portName);
         webSocketService = new WebSocketService(deviceService, deviceService.getObjectMapper());
 
@@ -98,7 +98,7 @@ public class SerialControllerApp {
             // REST API routes
             restService.registerRoutes(config.routes);
 
-            // WebSocket endpoint — all handling delegated to WebSocketService
+            // WebSocket endpoint - all handling delegated to WebSocketService
             config.routes.ws("/ws/data", ws -> {
                 ws.onConnect(webSocketService::onConnect);
                 ws.onMessage(webSocketService::onMessage);
@@ -176,7 +176,7 @@ public class SerialControllerApp {
     }
 
     /**
-     * Demo method for setting output voltage — kept for reference only.
+     * Demo method for setting output voltage - kept for reference only.
      *
      * <p>
      * This method is no longer called. It was removed from {@link #process(String[])} in Iteration 5
@@ -185,13 +185,13 @@ public class SerialControllerApp {
      * convention. Full resolution in Iteration 9.
      * </p>
      *
-     * @param portName port to use (unused — kept for signature compatibility)
+     * @param portName port to use (unused - kept for signature compatibility)
      * @throws Exception never in normal operation; inherited from old implementation
      */
     @Deprecated
     @SuppressWarnings("unused")
     private void demoVoltages(@Deprecated final String portName) throws Exception {
-        // Removed call site in Iteration 5 — see class Javadoc.
+        // Removed call site in Iteration 5 - see class Javadoc.
         // This method conflicts with DeviceService transport ownership and must not be called.
     }
 
