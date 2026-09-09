@@ -6,6 +6,7 @@ import java.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.serial.devices.RidenRD50xx;
 import com.serial.devices.RidenRD60xx;
 import com.serial.devices.Sinilink;
@@ -49,6 +50,17 @@ public class DeviceService {
 
     /** Polling interval in milliseconds. */
     private static final int POLL_INTERVAL_MS = 1000;
+
+    /**
+     * Shared Jackson {@link ObjectMapper} instance.
+     *
+     * <p>
+     * A single instance is created here and shared with {@link WebSocketService} and
+     * {@link RestService}. {@code ObjectMapper} is thread-safe after configuration and
+     * expensive to construct — one instance per application is the correct pattern.
+     * </p>
+     */
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** The detected converter instance. {@code null} if no device was found. */
     private DC2DCConverter converter;
@@ -131,6 +143,21 @@ public class DeviceService {
      */
     public ConverterState getState() {
         return state;
+    }
+
+    /**
+     * Returns the shared {@link ObjectMapper} instance.
+     *
+     * <p>
+     * Used by {@link WebSocketService} and {@link RestService} to serialise
+     * {@link ConverterState} to JSON. Sharing a single instance avoids the overhead of
+     * constructing multiple mappers.
+     * </p>
+     *
+     * @return the application-wide Jackson {@code ObjectMapper}
+     */
+    public ObjectMapper getObjectMapper() {
+        return objectMapper;
     }
 
     /**

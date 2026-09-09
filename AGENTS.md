@@ -56,7 +56,8 @@ Registers 0x0000/0x0001 mirror active memory M0 (0x0050/0x0051). Calling `REG_ME
 
 - Static UI served from `src/main/resources/public/` at `/`
 - WebSocket `/ws/data` — server pushes `{"voltage":…,"current":…}` every 1 s; client sends `{"setCurrent":<0.0–2.0>}`
-- Swagger UI at `/swagger`
+- OpenAPI JSON endpoint at `/openapi`
+- Swagger UI at `/openapi/ui`
 - Server runs for 600 s then stops; adjust `sleepSeconds(600)` in `SerialControllerApp` to change lifetime.
 
 ## Code Style
