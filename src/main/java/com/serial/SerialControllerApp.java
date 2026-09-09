@@ -1,5 +1,6 @@
 package com.serial;
 
+import java.nio.channels.ClosedChannelException;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -145,23 +146,34 @@ public class SerialControllerApp {
                 });
                 ws.onError(ctx -> {
                     clients.remove(ctx);
-                    logger.warn("WebSocket error", ctx.error());
+                    Throwable error = ctx.error();
+                    if (error instanceof ClosedChannelException
+                            || error instanceof java.io.EOFException) {
+                        logger.debug("WebSocket connection closed by peer or server shutdown: {}", error.toString());
+                    } else {
+                        logger.warn("WebSocket error", error);
+                    }
                 });
             });
 
-            // OpenAPI
+            // OpenAPI JSON endpoint at /openapi
             config.registerPlugin(new OpenApiPlugin(openApiConfig -> {
+                openApiConfig.withDocumentationPath("/openapi");
                 openApiConfig.withDefinitionConfiguration((version, definition) -> {
                     definition.info(info -> info.title("SerialController").version("1.0.0"));
+                    definition.withBasicAuth("BasicAuth");
                 });
             }));
 
-            // Swagger UI at /swagger
-            config.registerPlugin(new SwaggerPlugin());
+            // Swagger UI at /openapi/ui
+            config.registerPlugin(new SwaggerPlugin(swaggerConfig -> {
+                swaggerConfig.withDocumentationPath("/openapi");
+                swaggerConfig.withUiPath("/openapi/ui");
+            }));
 
         }).start(8000);
 
-        // Give the exit handler a reference to javalin and a shutdown runnable that wakes
+        // Give the exit handler a reference to Javalin and a shutdown runnable that wakes
         // the main thread (which is sleeping in shutdownLock.wait below).
         restService.setShutdown(javalin, () -> {
             synchronized (shutdownLock) {
@@ -269,26 +281,6 @@ public class SerialControllerApp {
     }
 
     /**
-     * Demo method for setting output voltage — kept for reference only.
-     *
-     * <p>
-     * This method is no longer called. It was removed from {@link #process(String[])} in Iteration 5
-     * because it opens its own {@code ModbusTransport}, which conflicts with {@link DeviceService}
-     * holding exclusive transport ownership. Retained here with {@code @Deprecated} per project convention.
-     * Full resolution in Iteration 9.
-     * </p>
-     *
-     * @param portName port to use (unused — kept for signature compatibility)
-     * @throws Exception never in normal operation; inherited from old implementation
-     */
-    @Deprecated
-    @SuppressWarnings("unused")
-    private void demoVoltages(@Deprecated final String portName) throws Exception {
-        // Removed call site in Iteration 5 — see class Javadoc.
-        // This method conflicts with DeviceService transport ownership and must not be called.
-    }
-
-    /**
      * Returns the given value if it is non-null and non-empty, otherwise {@code "N/A"}.
      *
      * @param value the value to check
@@ -297,4 +289,5 @@ public class SerialControllerApp {
     private String valueOrNA(final String value) {
         return (value != null && !value.isEmpty()) ? value : "N/A";
     }
+    
 }

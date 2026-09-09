@@ -7,6 +7,7 @@ import com.serial.device.DeviceRegister;
 import com.serial.device.ModbusDevice;
 import com.serial.device.SinilinkRegisters;
 import com.serial.devices.ifc.DC2DCConverter;
+import com.serial.modbus.ModbusConstants;
 import com.serial.modbus.ModbusTransport;
 
 /**
@@ -48,6 +49,9 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
 
     public static final DeviceRegister TEMP_CELSIUS = new DeviceRegister("Internal temperature Celsius", "°C",
             SinilinkRegisters.REG_TEMPERATURE_INTERNAL, 10);
+
+    public static final DeviceRegister LOCK = new DeviceRegister("Keypad Lock", null,
+            SinilinkRegisters.REG_KEYPAD_LOCK);
 
     /**
      * Constructor.
@@ -169,12 +173,12 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
 
     @Override
     public void setOutput(boolean on) throws Exception {
-        writeInt(OUTPUT_ENABLE, (on ? 1 : 0));
+        writeInt(OUTPUT_ENABLE, (on ? ModbusConstants.STATE_ON : ModbusConstants.STATE_OFF));
     }
 
     @Override
     public boolean getOutput() throws Exception {
-        return (readInt(OUTPUT_ENABLE) > 0 ? true : false);
+        return (readInt(OUTPUT_ENABLE) == ModbusConstants.STATE_ON);
     }
 
     @Override
@@ -184,17 +188,27 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
 
     @Override
     public void setProtectionState(boolean on) throws Exception {
-        writeInt(PROTECTION_STATE, (on ? 1 : 0));
+        writeInt(PROTECTION_STATE, (on ? ModbusConstants.STATE_ON : ModbusConstants.STATE_OFF));
     }
 
     @Override
     public boolean getProtectionState() throws Exception {
-        return (readInt(PROTECTION_STATE) > 0 ? true : false);
+        return (readInt(PROTECTION_STATE) == ModbusConstants.STATE_ON);
     }
 
     @Override
     public double getTemperatureCelsius() throws Exception {
         return read(TEMP_CELSIUS);
+    }
+
+    @Override
+    public void setKeypad(final boolean locked) throws Exception {
+        writeInt(LOCK, (locked ? ModbusConstants.STATE_ON : ModbusConstants.STATE_OFF));
+    }
+
+    @Override
+    public boolean getKeypad() throws Exception {
+        return (readInt(LOCK) == ModbusConstants.STATE_ON);
     }
 
     public int getHardwareVersion() throws Exception {

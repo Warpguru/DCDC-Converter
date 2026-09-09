@@ -202,6 +202,18 @@ public class DeviceService {
     }
 
     /**
+     * Sets the keypad (child lock) state and updates {@link ConverterState#setKeypadLocked}.
+     *
+     * @param locked {@code true} to lock the keypad, {@code false} to unlock it
+     * @throws Exception if the Modbus write fails
+     */
+    public synchronized void setKeypad(final boolean locked) throws Exception {
+        logger.info("Setting keypad lock to {}", locked ? "LOCKED" : "UNLOCKED");
+        converter.setKeypad(locked);
+        state.setKeypadLocked(locked);
+    }
+
+    /**
      * Clears a tripped protection state on the device and resets {@link ConverterState#setProtectionState} to 0.
      *
      * <p>
@@ -438,6 +450,7 @@ public class DeviceService {
             state.setVoltageIn(converter.getInputVoltage());
             state.setTemperatureCelsius(converter.getTemperatureCelsius());
             state.setOutputEnabled(converter.getOutput());
+            state.setKeypadLocked(converter.getKeypad());
             state.setProtectionState(converter.getProtectionState() ? 1 : 0);
 
             // Setpoints — polled to detect front-panel changes

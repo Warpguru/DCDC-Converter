@@ -69,6 +69,16 @@ public class ConverterState {
     private volatile boolean outputEnabled;
 
     /**
+     * Keypad lock (child lock) state.
+     *
+     * <ul>
+     * <li>{@code true} — keypad is locked</li>
+     * <li>{@code false} — keypad is unlocked</li>
+     * </ul>
+     */
+    private volatile boolean keypadLocked;
+
+    /**
      * Protection state code.
      *
      * <ul>
@@ -276,6 +286,24 @@ public class ConverterState {
      */
     public void setOutputEnabled(final boolean outputEnabled) {
         this.outputEnabled = outputEnabled;
+    }
+
+    /**
+     * Returns the keypad lock (child lock) state.
+     *
+     * @return {@code true} if keypad is locked, {@code false} if unlocked
+     */
+    public boolean isKeypadLocked() {
+        return keypadLocked;
+    }
+
+    /**
+     * Sets the keypad lock (child lock) state. Called by the polling thread and by write operations.
+     *
+     * @param keypadLocked {@code true} to indicate keypad is locked
+     */
+    public void setKeypadLocked(final boolean keypadLocked) {
+        this.keypadLocked = keypadLocked;
     }
 
     /**
