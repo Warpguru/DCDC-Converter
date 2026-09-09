@@ -1,5 +1,8 @@
 package com.serial.devices;
 
+import java.util.List;
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,8 +59,23 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
             SinilinkRegisters.REG_KEYPAD_LOCK);
 
     /**
+     * Whitelist mapping known Sinilink model register raw values to their model names.
+     *
+     * <p>
+     * 22802 (0x5912) corresponds to XY6008. Validating against this whitelist avoids false positives
+     * when probing non-Sinilink hardware where register 0x0016 holds unrelated data.
+     * </p>
+     */
+    private static final Map<Integer, String> KNOWN_MODELS = Map.of(
+            22802, "XY6008",
+            22804, "XY6014",
+            22805, "XY6020",
+            19208, "XY5008"
+    );
+
+    /**
      * Constructor.
-     * 
+     *
      * @param portName of {@code SerialPort} used with Modbus protocol
      * @param slave    port to use
      */
@@ -66,61 +84,63 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
     }
 
     /**
-     * Verify that {@code Sinilink} is present.
-     * 
-     * @return {@link Sinilink} instance or {@code Null}
+     * Verify that {@code Sinilink} is present using all standard baud rates in {@link ModbusTransport#BAUDS}.
+     *
+     * @return this {@link Sinilink} instance
      */
     public DC2DCConverter verifyDevicePresent() {
+        return verifyDevicePresent(ModbusTransport.BAUDS);
+    }
+
+    /**
+     * Verify that {@code Sinilink} is present probing only the specified baud rates.
+     *
+     * <p>
+     * Probes the hardware model register (0x0016) first and validates it against {@link #KNOWN_MODELS}.
+     * If matched, reads the firmware version (0x0017) to complete detection.
+     * </p>
+     *
+     * @param bauds list of baud rates to probe in order
+     * @return this {@link Sinilink} instance
+     */
+    public DC2DCConverter verifyDevicePresent(final List<Integer> bauds) {
         logger.info("Checking for Sinilink device...");
-        // Sinilink defaults to 115200 Baud
-        for (final Integer baud : ModbusTransport.BAUDS) {
+        for (final Integer baud : bauds) {
             try {
-                // Initialize with current Baud rate
                 transport = new ModbusTransport(portName, baud);
                 logger.debug("Trying baud rate {}", baud);
-                // Try firmware register
-                try {
-                    int firmwareVersion = getFirmwareVersion();
-                    logger.info("Firmware version register read: {}", firmwareVersion);
-                    if (firmwareVersion > 0 && firmwareVersion < 65535) {
-                        logger.info("Device detected via firmware version register.");
-                        if (firmwareVersion == 110) {
-                            this.manufacturer = "Sinilink";
-                            this.device = "XY6008";
-                        }
-                    }
-                } catch (Exception e) {
-                    // Probably wrong Baud rate
-                    logger.debug("Firmware version read failed at {} baud: {}", baud, e.getMessage());
-                }
-                // Try hardware register
+
+                // Probe model register (0x0016) against whitelist
                 try {
                     int modelVersion = getModelVersion();
-                    logger.info("Model version register read: {}", modelVersion);
-                    if (modelVersion > 0 && modelVersion < 65535) {
-                        logger.info("Device detected via model version register.");
-                        if (modelVersion == 22802) {
-                            this.manufacturer = "Sinilink";
-                            this.device = "XY6008";
+                    logger.debug("Model version register read at {} baud: {}", baud, modelVersion);
+                    String modelName = KNOWN_MODELS.get(modelVersion);
+                    if (modelName != null) {
+                        this.manufacturer = "Sinilink";
+                        this.device = modelName;
+                        int fw = 0;
+                        try {
+                            fw = getFirmwareVersion();
+                        } catch (Exception ignored) {
                         }
+                        logger.info("Detected Sinilink {} (Model: {}, FW: {}) at {} baud.", modelName, modelVersion, fw, baud);
                     }
                 } catch (Exception e) {
-                    // Probably wrong Baud rate
                     logger.debug("Model version read failed at {} baud: {}", baud, e.getMessage());
                 }
+
                 if (!isDeviceDetected()) {
-                    // Probably still wrong Baud rate, retry with next Baud rate
                     transport.close();
                 } else {
-                    // Device detected
                     break;
                 }
             } catch (Exception e) {
                 logger.debug("Transport error at {} baud: {}", baud, e.getMessage());
-                transport.close();
+                if (transport != null) {
+                    transport.close();
+                }
             }
         }
-        // Check for detected device
         if (!isDeviceDetected()) {
             logger.info("No Sinilink detected.");
         }
