@@ -118,10 +118,26 @@ public interface DC2DCConverter {
     
     /**
      * Get the protection state.
-     * 
+     *
      * @return {@code true} or {@code false}
      * @throws Exception
      */
     public boolean getProtectionState() throws Exception;
+
+    /**
+     * Set the keypad (child lock) state.
+     *
+     * @param locked {@code true} to lock the keypad, {@code false} to unlock it
+     * @throws Exception if writing to the device fails
+     */
+    public void setKeypad(final boolean locked) throws Exception;
+
+    /**
+     * Get the keypad (child lock) state.
+     *
+     * @return {@code true} if locked, {@code false} if unlocked
+     * @throws Exception if reading from the device fails
+     */
+    public boolean getKeypad() throws Exception;
     
 }

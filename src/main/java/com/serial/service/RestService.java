@@ -9,11 +9,13 @@ import org.slf4j.LoggerFactory;
 
 import io.javalin.Javalin;
 import io.javalin.http.Context;
+import io.javalin.http.HttpStatus;
 import io.javalin.openapi.HttpMethod;
 import io.javalin.openapi.OpenApi;
 import io.javalin.openapi.OpenApiContent;
 import io.javalin.openapi.OpenApiRequestBody;
 import io.javalin.openapi.OpenApiResponse;
+import io.javalin.openapi.OpenApiSecurity;
 import io.javalin.router.JavalinDefaultRoutingApi;
 import io.javalin.security.BasicAuthCredentials;
 
@@ -23,7 +25,7 @@ import io.javalin.security.BasicAuthCredentials;
  * <p>
  * All endpoints are registered under the {@code /api} prefix. Each handler method carries an
  * {@code @OpenApi} annotation so the compile-time annotation processor emits a valid OpenAPI 3.x
- * specification, which the Swagger UI at {@code /swagger} renders correctly.
+ * specification, which the Swagger UI at {@code /openapi/ui} renders correctly.
  * </p>
  *
  * <p>Routes provided:</p>
@@ -32,6 +34,7 @@ import io.javalin.security.BasicAuthCredentials;
  * <li>{@code PUT  /api/voltage}          — set output voltage setpoint</li>
  * <li>{@code PUT  /api/current}          — set output current setpoint</li>
  * <li>{@code PUT  /api/output}           — enable or disable the output</li>
+ * <li>{@code PUT  /api/keypad}           — lock or unlock the keypad (child lock)</li>
  * <li>{@code POST /api/protection/clear} — clear a tripped protection condition</li>
  * <li>{@code POST /api/exit}             — shut down the application (Basic Auth required)</li>
  * </ul>
@@ -46,6 +49,57 @@ import io.javalin.security.BasicAuthCredentials;
 public class RestService {
 
     private static final Logger logger = LoggerFactory.getLogger(RestService.class);
+
+    /** REST API context root. */
+    public static final String API_CONTEXT_ROOT = "/api";
+
+    /** Endpoint path for full converter state. */
+    public static final String PATH_STATE = "/state";
+
+    /** Endpoint path for device capability limits. */
+    public static final String PATH_LIMITS = "/limits";
+
+    /** Endpoint path for output voltage setpoint. */
+    public static final String PATH_VOLTAGE = "/voltage";
+
+    /** Endpoint path for output current setpoint. */
+    public static final String PATH_CURRENT = "/current";
+
+    /** Endpoint path for output enable/disable. */
+    public static final String PATH_OUTPUT = "/output";
+
+    /** Endpoint path for keypad lock (child lock). */
+    public static final String PATH_KEYPAD = "/keypad";
+
+    /** Endpoint path for clearing tripped protection. */
+    public static final String PATH_PROTECTION_CLEAR = "/protection/clear";
+
+    /** Endpoint path for administrative application shutdown. */
+    public static final String PATH_EXIT = "/exit";
+
+    /** Full URI for full converter state. */
+    public static final String URI_STATE = API_CONTEXT_ROOT + PATH_STATE;
+
+    /** Full URI for device capability limits. */
+    public static final String URI_LIMITS = API_CONTEXT_ROOT + PATH_LIMITS;
+
+    /** Full URI for output voltage setpoint. */
+    public static final String URI_VOLTAGE = API_CONTEXT_ROOT + PATH_VOLTAGE;
+
+    /** Full URI for output current setpoint. */
+    public static final String URI_CURRENT = API_CONTEXT_ROOT + PATH_CURRENT;
+
+    /** Full URI for output enable/disable. */
+    public static final String URI_OUTPUT = API_CONTEXT_ROOT + PATH_OUTPUT;
+
+    /** Full URI for keypad lock (child lock). */
+    public static final String URI_KEYPAD = API_CONTEXT_ROOT + PATH_KEYPAD;
+
+    /** Full URI for clearing tripped protection. */
+    public static final String URI_PROTECTION_CLEAR = API_CONTEXT_ROOT + PATH_PROTECTION_CLEAR;
+
+    /** Full URI for administrative application shutdown. */
+    public static final String URI_EXIT = API_CONTEXT_ROOT + PATH_EXIT;
 
     /** Properties file name expected next to the JAR. */
     private static final String PROPS_FILE = "serial-controller.properties";
@@ -102,12 +156,14 @@ public class RestService {
      * @param router the routing API to register routes on (typically {@code config.routes})
      */
     public void registerRoutes(final JavalinDefaultRoutingApi router) {
-        router.get("/api/state",             this::getState);
-        router.put("/api/voltage",           this::setVoltage);
-        router.put("/api/current",           this::setCurrent);
-        router.put("/api/output",            this::setOutput);
-        router.post("/api/protection/clear", this::clearProtection);
-        router.post("/api/exit",             this::exit);
+        router.get(URI_STATE,             this::getState);
+        router.get(URI_LIMITS,            this::getLimits);
+        router.put(URI_VOLTAGE,           this::setVoltage);
+        router.put(URI_CURRENT,           this::setCurrent);
+        router.put(URI_OUTPUT,            this::setOutput);
+        router.put(URI_KEYPAD,            this::setKeypad);
+        router.post(URI_PROTECTION_CLEAR, this::clearProtection);
+        router.post(URI_EXIT,             this::exit);
     }
 
     // -------------------------------------------------------------------------
@@ -121,7 +177,7 @@ public class RestService {
      */
     // @formatter:off
     @OpenApi(
-        path        = "/api/state",
+        path        = URI_STATE,
         methods     = { HttpMethod.GET },
         summary     = "Get converter state",
         description = "Returns the full current state of the DC/DC converter: measured values, setpoints, and device information.",
@@ -138,6 +194,38 @@ public class RestService {
     }
 
     /**
+     * Returns the device capability limits from the current converter state.
+     *
+     * <p>Useful for clients that need to know the valid voltage/current range before sending
+     * setpoint commands, without fetching the full state snapshot.</p>
+     *
+     * @param ctx the Javalin request context
+     */
+    // @formatter:off
+    @OpenApi(
+        path        = URI_LIMITS,
+        methods     = { HttpMethod.GET },
+        summary     = "Get device limits",
+        description = "Returns the device capability limits: manufacturer, device name, and the min/max voltage, current, and power values loaded from the device properties file.",
+        tags        = { "Converter" },
+        responses   = {
+            @OpenApiResponse(status = "200",
+                description = "Device capability limits",
+                content     = { @OpenApiContent(from = LimitsResponse.class) })
+        }
+    )
+    // @formatter:on
+    public void getLimits(final Context ctx) {
+        ConverterState s = deviceService.getState();
+        ctx.json(new LimitsResponse(
+                s.getManufacturer(),
+                s.getDeviceName(),
+                s.getMinVoltage(), s.getMaxVoltage(),
+                s.getMinCurrent(), s.getMaxCurrent(),
+                s.getMaxPower()));
+    }
+
+    /**
      * Sets the output voltage setpoint.
      *
      * <p>Request body: {@code { "voltage": 5.0 }} — voltage in volts.</p>
@@ -146,7 +234,7 @@ public class RestService {
      */
     // @formatter:off
     @OpenApi(
-        path        = "/api/voltage",
+        path        = URI_VOLTAGE,
         methods     = { HttpMethod.PUT },
         summary     = "Set output voltage",
         description = "Sets the output voltage setpoint on the device. Value must be within the device's configured voltage limits.",
@@ -165,17 +253,17 @@ public class RestService {
     // @formatter:on
     public void setVoltage(final Context ctx) {
         if (!deviceService.isDeviceDetected()) {
-            ctx.status(503).result("No device connected");
+            ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("No device connected");
             return;
         }
         VoltageRequest req = ctx.bodyAsClass(VoltageRequest.class);
         try {
             deviceService.setVoltage(req.voltage);
-            ctx.status(204);
+            ctx.status(HttpStatus.NO_CONTENT);
         } catch (IllegalArgumentException e) {
-            ctx.status(400).result(e.getMessage());
+            ctx.status(HttpStatus.BAD_REQUEST).result(e.getMessage());
         } catch (Exception e) {
-            ctx.status(500).result("Device write failed");
+            ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
         }
     }
 
@@ -188,7 +276,7 @@ public class RestService {
      */
     // @formatter:off
     @OpenApi(
-        path        = "/api/current",
+        path        = URI_CURRENT,
         methods     = { HttpMethod.PUT },
         summary     = "Set output current",
         description = "Sets the output current setpoint on the device. Value must be within the device's configured current limits.",
@@ -207,17 +295,17 @@ public class RestService {
     // @formatter:on
     public void setCurrent(final Context ctx) {
         if (!deviceService.isDeviceDetected()) {
-            ctx.status(503).result("No device connected");
+            ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("No device connected");
             return;
         }
         CurrentRequest req = ctx.bodyAsClass(CurrentRequest.class);
         try {
             deviceService.setCurrent(req.current);
-            ctx.status(204);
+            ctx.status(HttpStatus.NO_CONTENT);
         } catch (IllegalArgumentException e) {
-            ctx.status(400).result(e.getMessage());
+            ctx.status(HttpStatus.BAD_REQUEST).result(e.getMessage());
         } catch (Exception e) {
-            ctx.status(500).result("Device write failed");
+            ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
         }
     }
 
@@ -230,7 +318,7 @@ public class RestService {
      */
     // @formatter:off
     @OpenApi(
-        path        = "/api/output",
+        path        = URI_OUTPUT,
         methods     = { HttpMethod.PUT },
         summary     = "Enable or disable output",
         description = "Enables or disables the converter output.",
@@ -248,15 +336,54 @@ public class RestService {
     // @formatter:on
     public void setOutput(final Context ctx) {
         if (!deviceService.isDeviceDetected()) {
-            ctx.status(503).result("No device connected");
+            ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("No device connected");
             return;
         }
         OutputRequest req = ctx.bodyAsClass(OutputRequest.class);
         try {
             deviceService.setOutput(req.outputEnable);
-            ctx.status(204);
+            ctx.status(HttpStatus.NO_CONTENT);
         } catch (Exception e) {
-            ctx.status(500).result("Device write failed");
+            ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
+        }
+    }
+
+    /**
+     * Locks or unlocks the converter keypad (child lock).
+     *
+     * <p>Request body: {@code { "keypadLock": true }} to lock, {@code { "keypadLock": false }} to unlock.</p>
+     *
+     * @param ctx the Javalin request context
+     */
+    // @formatter:off
+    @OpenApi(
+        path        = URI_KEYPAD,
+        methods     = { HttpMethod.PUT },
+        summary     = "Lock or unlock keypad",
+        description = "Locks or unlocks the converter keypad (child lock).",
+        tags        = { "Converter" },
+        requestBody = @OpenApiRequestBody(
+            required    = true,
+            description = "true to lock the keypad, false to unlock it",
+            content     = { @OpenApiContent(from = KeypadRequest.class, example = "{\"keypadLock\": true}") }
+        ),
+        responses   = {
+            @OpenApiResponse(status = "204", description = "Keypad lock state applied successfully"),
+            @OpenApiResponse(status = "503", description = "No device connected")
+        }
+    )
+    // @formatter:on
+    public void setKeypad(final Context ctx) {
+        if (!deviceService.isDeviceDetected()) {
+            ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("No device connected");
+            return;
+        }
+        KeypadRequest req = ctx.bodyAsClass(KeypadRequest.class);
+        try {
+            deviceService.setKeypad(req.keypadLock);
+            ctx.status(HttpStatus.NO_CONTENT);
+        } catch (Exception e) {
+            ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
         }
     }
 
@@ -267,7 +394,7 @@ public class RestService {
      */
     // @formatter:off
     @OpenApi(
-        path        = "/api/protection/clear",
+        path        = URI_PROTECTION_CLEAR,
         methods     = { HttpMethod.POST },
         summary     = "Clear protection",
         description = "Clears a tripped protection condition (OVP, OCP, OPP, etc.) and allows the device to resume normal operation.",
@@ -280,14 +407,14 @@ public class RestService {
     // @formatter:on
     public void clearProtection(final Context ctx) {
         if (!deviceService.isDeviceDetected()) {
-            ctx.status(503).result("No device connected");
+            ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("No device connected");
             return;
         }
         try {
             deviceService.clearProtection();
-            ctx.status(204);
+            ctx.status(HttpStatus.NO_CONTENT);
         } catch (Exception e) {
-            ctx.status(500).result("Device write failed");
+            ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
         }
     }
 
@@ -304,11 +431,14 @@ public class RestService {
      */
     // @formatter:off
     @OpenApi(
-        path        = "/api/exit",
+        path        = URI_EXIT,
         methods     = { HttpMethod.POST },
         summary     = "Shut down the application",
         description = "Performs a clean shutdown of the Serial Controller application. Requires HTTP Basic Authentication (credentials configured in serial-controller.properties next to the JAR).",
         tags        = { "Admin" },
+        security    = {
+            @OpenApiSecurity(name = "BasicAuth")
+        },
         responses   = {
             @OpenApiResponse(status = "204", description = "Shutdown initiated"),
             @OpenApiResponse(status = "401", description = "Missing or invalid credentials"),
@@ -320,14 +450,14 @@ public class RestService {
         // Load credentials from properties file next to the JAR
         Properties props = loadExitCredentials();
         if (props == null) {
-            ctx.status(503).result("Exit credentials not configured (serial-controller.properties not found)");
+            ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("Exit credentials not configured (serial-controller.properties not found)");
             return;
         }
 
         String expectedUsername = props.getProperty("exit.username");
         String expectedPassword = props.getProperty("exit.password");
         if (expectedUsername == null || expectedPassword == null) {
-            ctx.status(503).result("Exit credentials not configured (exit.username / exit.password missing)");
+            ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("Exit credentials not configured (exit.username / exit.password missing)");
             return;
         }
 
@@ -337,12 +467,12 @@ public class RestService {
                 || !expectedUsername.equals(creds.getUsername())
                 || !expectedPassword.equals(creds.getPassword())) {
             ctx.header("WWW-Authenticate", "Basic realm=\"SerialController\"");
-            ctx.status(401).result("Unauthorized");
+            ctx.status(HttpStatus.UNAUTHORIZED).result("Unauthorized");
             return;
         }
 
         logger.info("Shutdown requested via /api/exit by user '{}'", creds.getUsername());
-        ctx.status(204);
+        ctx.status(HttpStatus.NO_CONTENT);
 
         // Shut down on a daemon thread so the 204 response is committed first.
         Thread t = new Thread(() -> {
@@ -418,4 +548,62 @@ public class RestService {
         /** {@code true} to enable the output, {@code false} to disable it. */
         public boolean outputEnable;
     }
+
+    /**
+     * Request body for {@code PUT /api/keypad}.
+     *
+     * <pre>{ "keypadLock": true }</pre>
+     */
+    public static class KeypadRequest {
+        /** {@code true} to lock the keypad, {@code false} to unlock it. */
+        public boolean keypadLock;
+    }
+
+    /**
+     * Response body for {@code GET /api/limits}.
+     *
+     * <p>Contains only the device capability limits — a subset of {@link ConverterState}
+     * useful for clients that need to know valid ranges without fetching the full state.</p>
+     */
+    public static class LimitsResponse {
+        /** Device manufacturer name, e.g. {@code "Sinilink"}. */
+        public final String manufacturer;
+        /** Device model name, e.g. {@code "XY6008"}. */
+        public final String deviceName;
+        /** Minimum output voltage in volts (V). */
+        public final double minVoltage;
+        /** Maximum output voltage in volts (V). */
+        public final double maxVoltage;
+        /** Minimum output current in amperes (A). */
+        public final double minCurrent;
+        /** Maximum output current in amperes (A). */
+        public final double maxCurrent;
+        /** Maximum output power in watts (W). */
+        public final double maxPower;
+
+        /**
+         * Constructs a {@code LimitsResponse} from the given device capability values.
+         *
+         * @param manufacturer device manufacturer name
+         * @param deviceName   device model name
+         * @param minVoltage   minimum output voltage (V)
+         * @param maxVoltage   maximum output voltage (V)
+         * @param minCurrent   minimum output current (A)
+         * @param maxCurrent   maximum output current (A)
+         * @param maxPower     maximum output power (W)
+         */
+        public LimitsResponse(final String manufacturer, final String deviceName,
+                final double minVoltage, final double maxVoltage,
+                final double minCurrent, final double maxCurrent,
+                final double maxPower) {
+            this.manufacturer = manufacturer;
+            this.deviceName   = deviceName;
+            this.minVoltage   = minVoltage;
+            this.maxVoltage   = maxVoltage;
+            this.minCurrent   = minCurrent;
+            this.maxCurrent   = maxCurrent;
+            this.maxPower     = maxPower;
+        }
+    }
+    
 }

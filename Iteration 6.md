@@ -46,75 +46,75 @@ Returns the full `ConverterState` as JSON.
 Response `200`: `ConverterState` serialised by Jackson.
 
 #### `GET /api/limits`
-Returns only the device limit fields from `ConverterState` (deviceName, manufacturer, maxVoltage, minVoltage, maxCurrent, minCurrent, maxPower) as JSON.
+Returns only the device limit fields from `ConverterState` (`manufacturer`, `deviceName`, `minVoltage`, `maxVoltage`, `minCurrent`, `maxCurrent`, `maxPower`) as a `LimitsResponse` JSON object.
 
 Response `200`: JSON object with limit fields.
 
-#### `POST /api/voltage`
+#### `PUT /api/voltage`
 Request body: `{"voltage": 5.0}`
 
-Validates that `voltage` is within `[minVoltage, maxVoltage]`. On success calls `deviceService.setVoltage()`.
+Validates that `voltage` is within `[minVoltage, maxVoltage]` (via `DeviceService.validateRange()`). On success calls `deviceService.setVoltage()`.
 
-Response `200`: updated `ConverterState` as JSON.
-Response `400`: `{"error": "Voltage out of range: <value> (min=<min>, max=<max>)"}`.
+Response `204`: voltage applied successfully.
+Response `400`: plain-text range error message.
+Response `503`: no device connected.
 
-#### `POST /api/current`
+> **Note:** `PUT` is used (not `POST`) because the operation is idempotent — sending the same voltage value twice has the same effect.
+
+#### `PUT /api/current`
 Request body: `{"current": 2.0}`
 
-Validates that `current` is within `[minCurrent, maxCurrent]`. On success calls `deviceService.setCurrent()`.
+Response `204`: current applied successfully.
+Response `400`: plain-text range error message.
+Response `503`: no device connected.
 
-Response `200`: updated `ConverterState` as JSON.
-Response `400`: `{"error": "Current out of range: <value> (min=<min>, max=<max>)"}`.
-
-#### `POST /api/output`
-Request body: `{"output": true}`
+#### `PUT /api/output`
+Request body: `{"outputEnable": true}`
 
 Calls `deviceService.setOutput()`.
 
-Response `200`: updated `ConverterState` as JSON.
+Response `204`: output state applied successfully.
+Response `503`: no device connected.
 
-#### `POST /api/protection`
-Request body: `{"protection": false}` — `false` clears a tripped protection; `true` has no effect on Modbus devices (protection trips are hardware-triggered).
+#### `POST /api/protection/clear`
+No request body.
 
-Calls `deviceService.clearProtection()` when value is `false`.
+Calls `deviceService.clearProtection()`.
 
-Response `200`: updated `ConverterState` as JSON.
-Response `400`: `{"error": "Only clearing protection (false) is supported"}` if value is `true`.
+Response `204`: protection cleared successfully.
+Response `503`: no device connected.
+
+#### `POST /api/exit` *(extra — beyond original spec)*
+No request body. Requires HTTP Basic Authentication.
+
+Credentials read from `serial-controller.properties` next to the JAR (`exit.username`, `exit.password`). Triggers a clean application shutdown after committing the response.
+
+Response `204`: shutdown initiated.
+Response `401`: missing or invalid credentials.
+Response `503`: credentials not configured.
 
 ### 3. Register Routes in `SerialControllerApp`
 
-Replace the existing stub `GET /init` and `GET /quit` route registrations in `SerialControllerApp` with the `RestService` routes. Register using the Javalin config routes API:
+Routes are registered via `restService.registerRoutes(config.routes)` inside the Javalin config lambda. `SerialControllerApp` also calls `restService.setShutdown(javalin, shutdownCallback)` after Javalin starts to give the `/api/exit` handler a reference for clean shutdown. ✅ **Already implemented.**
 
-```java
-RestService restService = new RestService(deviceService);
-config.routes.get("/api/state",      restService::getState);
-config.routes.get("/api/limits",     restService::getLimits);
-config.routes.post("/api/voltage",   restService::setVoltage);
-config.routes.post("/api/current",   restService::setCurrent);
-config.routes.post("/api/output",    restService::setOutput);
-config.routes.post("/api/protection",restService::clearProtection);
-```
+### 4. Manual Verification
 
-The existing `init()` and `quit()` methods in `SerialControllerApp` may be kept (they are harmless stubs) or removed — do not remove without confirming first.
+With the application running (`java -jar target/SerialController.jar <port>`), verify with Postman or curl:
 
-### 4. Build and Manual Verification
-
-Run:
-```bat
-mvn clean package
-java -jar target/SerialController.jar <port>
-```
-
-Verify with Postman or curl:
-- `GET  http://localhost:8000/api/state`   → JSON with all fields
-- `GET  http://localhost:8000/api/limits`  → JSON with limit fields
-- `POST http://localhost:8000/api/voltage` body `{"voltage":5.0}` → 200
-- `POST http://localhost:8000/api/voltage` body `{"voltage":999}` → 400
-- `GET  http://localhost:8000/swagger`     → Swagger UI showing all 6 endpoints
+| Request | Expected |
+|---|---|
+| `GET  /api/state` | JSON with all `ConverterState` fields |
+| `GET  /api/limits` | JSON with 7 limit fields only |
+| `PUT  /api/voltage` body `{"voltage":5.0}` | 204 |
+| `PUT  /api/voltage` body `{"voltage":999}` | 400 + range message |
+| `PUT  /api/current` body `{"current":1.0}` | 204 |
+| `PUT  /api/output` body `{"outputEnable":true}` | 204 |
+| `POST /api/protection/clear` | 204 |
+| `GET  /swagger` | Swagger UI showing all 7 endpoints |
 
 ## Acceptance Criteria
 
-- All 6 endpoints respond correctly to valid and invalid input.
+- All 7 endpoints (`state`, `limits`, `voltage`, `current`, `output`, `protection/clear`, `exit`) respond correctly.
 - Swagger UI at `/swagger` shows all endpoints with request/response schemas.
 - Input values outside device limits are rejected with HTTP 400 and a descriptive message.
 - No Modbus calls exist anywhere outside `DeviceService` and the device driver classes.

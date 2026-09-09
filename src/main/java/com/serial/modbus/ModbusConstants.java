@@ -34,5 +34,11 @@ public final class ModbusConstants {
     
     /** Write timeout [ms]. */
     public static final int WRITE_TIMEOUT_MS = 0;
+
+    /** Generic digital state ON / active / locked / enabled. */
+    public static final int STATE_ON = 1;
+
+    /** Generic digital state OFF / inactive / unlocked / disabled. */
+    public static final int STATE_OFF = 0;
     
 }
