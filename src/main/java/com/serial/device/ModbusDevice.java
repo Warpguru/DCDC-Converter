@@ -283,6 +283,73 @@ public abstract class ModbusDevice {
     }
 
     /**
+     * Reads a contiguous block of raw 16-bit Modbus register values in a single frame.
+     *
+     * <p>
+     * Delegates to {@link ModbusTransport#readRegisters(byte, int, int)}, which sends one
+     * Modbus {@code 0x03} request for all {@code count} registers and returns them in a single
+     * serial round-trip. The returned array is indexed by offset from {@code startAddress}:
+     * element {@code [0]} is the value at {@code startAddress}, element {@code [1]} at
+     * {@code startAddress + 1}, and so on.
+     * </p>
+     *
+     * <p>
+     * Values are raw (unscaled). Callers are responsible for applying the appropriate scale
+     * factor for each offset.
+     * </p>
+     *
+     * <p>
+     * Example:
+     * </p>
+     *
+     * <pre>
+     * int[] block = readBlock(SinilinkRegisters.REG_VSET, 19);
+     * double volts = block[0] / 100.0;  // VSET at offset 0
+     * double amps  = block[1] / 1000.0; // ISET at offset 1
+     * </pre>
+     *
+     * @param startAddress starting Modbus register address
+     * @param count        number of consecutive registers to read (1–32)
+     * @return raw 16-bit values at offsets {@code 0..(count-1)} from {@code startAddress}
+     * @throws Exception if communication with the device fails
+     */
+    protected int[] readBlock(final int startAddress, final int count) throws Exception {
+        return transport.readRegisters(slave, startAddress, count);
+    }
+
+    /**
+     * Writes raw 16-bit values to a contiguous block of Modbus registers in a single frame.
+     *
+     * <p>
+     * Delegates to {@link ModbusTransport#writeRegisters(byte, int, int[])}, which sends one
+     * Modbus {@code 0x10} request covering all {@code values.length} registers starting at
+     * {@code startAddress}. This uses a single serial round-trip regardless of how many
+     * registers are written.
+     * </p>
+     *
+     * <p>
+     * Values must already be scaled to raw register representation. Element {@code [0]}
+     * is written to {@code startAddress}, element {@code [1]} to {@code startAddress + 1},
+     * and so on.
+     * </p>
+     *
+     * <p>
+     * Example — write VSET and ISET atomically on a Sinilink:
+     * </p>
+     *
+     * <pre>
+     * writeBlock(SinilinkRegisters.REG_VSET, new int[] { 500, 2500 }); // 5.00 V, 2.500 A
+     * </pre>
+     *
+     * @param startAddress starting Modbus register address
+     * @param values       raw 16-bit values to write, one per register in address order (1–32 elements)
+     * @throws Exception if communication with the device fails
+     */
+    protected void writeBlock(final int startAddress, final int[] values) throws Exception {
+        transport.writeRegisters(slave, startAddress, values);
+    }
+
+    /**
      * Formats a numeric engineering value with the precision implied by the register's scale factor.
      *
      * <p>

@@ -506,12 +506,14 @@ public class DeviceService {
     // -------------------------------------------------------------------------
 
     /**
-     * Reads the current voltage and current setpoints from the device registers and stores them in
-     * {@link ConverterState}.
+     * Performs an initial bulk poll so that all {@link ConverterState} fields are populated
+     * before the polling thread starts and before the first page load.
      *
      * <p>
-     * This is called once on construction so that the initial state is accurate before the first poll cycle,
-     * avoiding a misleading "0.0 V / 0.0 A" display on first page load.
+     * Calls {@link com.serial.devices.ifc.DC2DCConverter#pollAll()} to populate the driver cache,
+     * then reads all values — including the true voltage and current setpoints (VSET/ISET) via
+     * {@link com.serial.devices.ifc.DC2DCConverter#getVoltageSet()} /
+     * {@link com.serial.devices.ifc.DC2DCConverter#getCurrentSet()} — into {@link ConverterState}.
      * </p>
      */
     private void readInitialSetpoints() {
@@ -519,11 +521,24 @@ public class DeviceService {
             return;
         }
         try {
-            state.setVoltageSet(converter.getVoltage());
-            state.setCurrentSet(converter.getCurrent());
-            logger.info("Initial setpoints read: vSet={}V iSet={}A", state.getVoltageSet(), state.getCurrentSet());
+            converter.pollAll();
+            state.setVoltageOut(converter.getVoltage());
+            state.setCurrentOut(converter.getCurrent());
+            state.setPowerOut(converter.getPower());
+            state.setVoltageIn(converter.getInputVoltage());
+            state.setTemperatureCelsius(converter.getTemperatureCelsius());
+            state.setOutputEnabled(converter.getOutput());
+            state.setKeypadLocked(converter.getKeypad());
+            state.setProtectionState(converter.getProtectionState() ? 1 : 0);
+            state.setCvMode(converter.isCvMode());
+            state.setVoltageSet(converter.getVoltageSet());
+            state.setCurrentSet(converter.getCurrentSet());
+            logger.info("Initial state read: vOut={}V iOut={}A vSet={}V iSet={}A output={} keypad={}",
+                    state.getVoltageOut(), state.getCurrentOut(),
+                    state.getVoltageSet(), state.getCurrentSet(),
+                    state.isOutputEnabled(), state.isKeypadLocked());
         } catch (Exception e) {
-            logger.warn("Could not read initial setpoints: {}", e.getMessage());
+            logger.warn("Could not read initial state: {}", e.getMessage());
         }
     }
 
@@ -561,9 +576,11 @@ public class DeviceService {
      * </p>
      *
      * <p>
-     * Both measured values and setpoints are read on every cycle. Reading setpoints ensures that changes
-     * made on the device's physical front panel (buttons/wheel) are picked up automatically and reflected
-     * in the state visible to the webpage and REST API.
+     * A single {@link com.serial.devices.ifc.DC2DCConverter#pollAll()} call fetches the entire
+     * register block in one Modbus frame, populating the driver's internal cache. All subsequent
+     * getter calls in this method return the freshly cached values without additional serial I/O.
+     * Setpoints (VSET/ISET) are included in the same bulk read, so front-panel changes are also
+     * detected every cycle.
      * </p>
      *
      * <p>
@@ -576,7 +593,9 @@ public class DeviceService {
             return;
         }
         try {
-            // Measured values
+            // One bulk read populates the entire driver cache.
+            converter.pollAll();
+
             state.setVoltageOut(converter.getVoltage());
             state.setCurrentOut(converter.getCurrent());
             state.setPowerOut(converter.getPower());
@@ -586,11 +605,8 @@ public class DeviceService {
             state.setKeypadLocked(converter.getKeypad());
             state.setProtectionState(converter.getProtectionState() ? 1 : 0);
             state.setCvMode(converter.isCvMode());
-
-            // Setpoints - polled to detect front-panel changes
-            // Note: getVoltage() reads VOUT (measured); we need VSET.
-            // DC2DCConverter does not expose getVoltageSet() - read it via the cast.
-            readSetpoints();
+            state.setVoltageSet(converter.getVoltageSet());
+            state.setCurrentSet(converter.getCurrentSet());
 
             // Poll succeeded - update online tracking.
             consecutiveFailures = 0;
@@ -649,29 +665,6 @@ public class DeviceService {
             logger.info("Serial port reconnect succeeded.");
         } catch (Exception ex) {
             logger.warn("Serial port reconnect failed: {}", ex.getMessage());
-        }
-    }
-
-    /**
-     * Reads the voltage and current setpoints from the device registers.
-     *
-     * <p>
-     * The {@link DC2DCConverter} interface exposes only measured output values ({@code getVoltage()} reads
-     * VOUT). Reading setpoints requires driver-specific register access, handled here per driver type.
-     * </p>
-     *
-     * @throws Exception if the Modbus read fails
-     */
-    private void readSetpoints() throws Exception {
-        if (converter instanceof Sinilink s) {
-            state.setVoltageSet(s.read(Sinilink.VSET));
-            state.setCurrentSet(s.read(Sinilink.ISET));
-        } else if (converter instanceof RidenRD50xx r) {
-            state.setVoltageSet(r.read(RidenRD50xx.VSET));
-            state.setCurrentSet(r.read(RidenRD50xx.ISET));
-        } else if (converter instanceof RidenRD60xx r) {
-            state.setVoltageSet(r.read(RidenRD60xx.VSET));
-            state.setCurrentSet(r.read(RidenRD60xx.ISET));
         }
     }
 

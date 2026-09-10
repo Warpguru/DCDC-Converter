@@ -2,7 +2,12 @@
 
 This document describes the three Modbus RTU function codes used by the devices in this project and provides worked frame examples for each. It is the reference for any implementation work in `ModbusTransport`.
 
-All devices in this project (Sinilink XY6008, Riden RD50xx, Riden RD60xx) support **only these three function codes**:
+Sources:
+- `doc/DPH5005 CNC Communication Protocol V1.2.pdf`
+- `doc/DPS5020 communication protocol V1.2.pdf` (Hangzhou Rui Deng Technology Co., Ltd)
+- `doc/RD6030.md`
+
+All devices in this project (Sinilink XY6008, Riden DPS50xx, Riden RD60xx) support **only these three function codes**:
 
 | Code | Name                    | Direction |
 |------|-------------------------|-----------|
@@ -323,21 +328,26 @@ slave=0x01
 | 0x0016  | MODEL     | R      | -     | Model identifier    |
 | 0x0017  | FIRMWARE  | R      | -     | Firmware version    |
 
-### Riden RD50xx
+### Riden DPS50xx (e.g. DPS5020)
 
-| Address | Name      | Access | Scale | Description         |
-|---------|-----------|--------|-------|---------------------|
-| 0x0000  | VSET      | R/W    | ×100  | Voltage setpoint    |
-| 0x0001  | ISET      | R/W    | ×100  | Current setpoint    |
-| 0x0002  | VOUT      | R      | ×100  | Measured voltage    |
-| 0x0003  | IOUT      | R      | ×100  | Measured current    |
-| 0x0004  | POUT      | R      | ×100  | Measured power      |
-| 0x0005  | VIN       | R      | ×100  | Input voltage       |
-| 0x0006  | LOCK      | R/W    | -     | Keypad lock (0/1)   |
-| 0x0007  | PROTECTION| R      | -     | Protection state    |
-| 0x0009  | OUTPUT    | R/W    | -     | Output enable (0/1) |
-| 0x000B  | DEVICE_ID | R      | -     | Model identifier    |
-| 0x0014  | FIRMWARE  | R      | ÷100  | Firmware version    |
+Source: `doc/DPS5020 communication protocol V1.2.pdf`. Note: **no temperature register, no energy counters (AH/WH), no serial-number registers** exist in this device family.
+
+| Address | Name       | Access | Scale | Description                              |
+|---------|------------|--------|-------|------------------------------------------|
+| 0x0000  | U-SET      | R/W    | ×100  | Voltage setpoint                         |
+| 0x0001  | I-SET      | R/W    | ×100  | Current setpoint                         |
+| 0x0002  | UOUT       | R      | ×100  | Measured output voltage                  |
+| 0x0003  | IOUT       | R      | ×100  | Measured output current                  |
+| 0x0004  | POWER      | R      | ×100  | Measured output power                    |
+| 0x0005  | UIN        | R      | ×100  | Input voltage                            |
+| 0x0006  | LOCK       | R/W    | -     | Keypad lock (0=unlocked, 1=locked)       |
+| 0x0007  | PROTECT    | R      | -     | Protection state (0=OK, 1=OVP, 2=OCP, 3=OPP) |
+| 0x0008  | CVCC       | R      | -     | Regulation mode (0=CV, 1=CC)             |
+| 0x0009  | ONOFF      | R/W    | -     | Output switch (0=OFF, 1=ON)              |
+| 0x000A  | B_LED      | R/W    | -     | Backlight brightness (0=darkest, 5=brightest) |
+| 0x000B  | MODEL      | R      | -     | Product model number (e.g. 5020)         |
+| 0x000C  | VERSON     | R      | ÷10   | Firmware version (e.g. 17 = v1.7)        |
+| 0x0023  | EXTRACT_M  | W      | -     | Recall preset data set (write 0–9)       |
 
 ### Riden RD60xx
 
@@ -360,6 +370,8 @@ slave=0x01
 ## Key Observations for this Codebase
 
 - **VSET and ISET are always at consecutive addresses** (VSET, VSET+1) on all three devices. A single `0x10` frame can therefore set both in one serial round-trip instead of two.
-- **`0x10` with `qty=1`** is functionally equivalent to `0x06` but produces a shorter acknowledgement (8 bytes vs 8 bytes - identical). Prefer `0x06` for single-register writes; it is simpler.
+- **`0x10` with `qty=1`** is functionally equivalent to `0x06` but produces a shorter acknowledgement (8 bytes vs 8 bytes — identical). Prefer `0x06` for single-register writes; it is simpler.
 - The **`0x10` response is always 8 bytes** regardless of how many registers were written. Plan `readBytes(8)` after transmitting a multi-write frame.
 - The **`0x03` response length** is variable: `3 + (count × 2) + 2` bytes. Calculate it from the requested count before reading.
+- The **DPS50xx (RD50xx) has no temperature register**. `getTemperatureCelsius()` returns the sentinel `-999.0` for this device family and must not be wired to any bulk-read offset.
+- **CRC byte order** is confirmed by both the DPH5005 and DPS5020 documents: low byte transmitted first, high byte second — matching `ModbusCRC` / `ModbusTransport` current implementation.

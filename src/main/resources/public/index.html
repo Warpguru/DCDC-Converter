@@ -40,6 +40,17 @@
         #deviceOnline.offline     { background: rgba(255,82,82,.15); color: #ff5252; }
         #deviceOnline.offline .dot{ background: #ff5252; }
 
+        /* WebSocket activity lightning - right-aligned icon in the header.
+           Normally dimmed; flashes bright cyan for 250 ms on every WS send/receive. */
+        #wsActivity {
+            margin-left: auto;
+            font-size: 1rem; line-height: 1;
+            opacity: .15;
+            transition: opacity .05s ease-in;
+            user-select: none;
+        }
+        #wsActivity.active { opacity: 1; }
+
         /* Shared flex row - cards, toggle row, controls row all use this */
         .row {
             display: flex; gap: .75rem; flex-wrap: wrap;
@@ -177,6 +188,7 @@
             <span class="dot"></span>
             <span id="deviceOnlineText">Offline</span>
         </div>
+        <span id="wsActivity" title="WebSocket activity">⚡</span>
     </div>
 
     <!-- Row 1: Measured values -->
@@ -304,6 +316,16 @@
         const keypadBtn        = document.getElementById('keypadBtn');
         const logEl            = document.getElementById('log');
 
+        const wsActivityEl     = document.getElementById('wsActivity');
+        let   wsActivityTimer  = null;
+
+        /* Flash the activity dot for 250 ms - called on every WS send and receive. */
+        function flashActivity() {
+            wsActivityEl.classList.add('active');
+            clearTimeout(wsActivityTimer);
+            wsActivityTimer = setTimeout(function () { wsActivityEl.classList.remove('active'); }, 250);
+        }
+
         const MAX_LOG = 20;
         const STEP    = 0.1;
 
@@ -352,7 +374,7 @@
             ctx.scale(dpr, dpr);
             ctx.clearRect(0, 0, w, h);
 
-            /* The native range slider track does not occupy the full element width —
+            /* The native range slider track does not occupy the full element width -
                the thumb is centred at the track ends, so usable track is inset by
                half a thumb-width (10 px) on each side. */
             var PAD  = 10;
@@ -482,6 +504,7 @@
         /* ---- Send helpers ---- */
         function sendVoltage() {
             if (ws && ws.readyState === WebSocket.OPEN) {
+                flashActivity();
                 ws.send(JSON.stringify({ setVoltage: voltageSetting }));
                 addLog('⚡ Set voltage → ' + voltageSetting.toFixed(2) + ' V');
             }
@@ -489,6 +512,7 @@
 
         function sendCurrent() {
             if (ws && ws.readyState === WebSocket.OPEN) {
+                flashActivity();
                 ws.send(JSON.stringify({ setCurrent: currentSetting }));
                 addLog('⚡ Set current → ' + currentSetting.toFixed(2) + ' A');
             }
@@ -499,7 +523,7 @@
             var v = parseFloat(voltageSlider.value);
             var ceil = buckCeiling();
             if (ceil !== null && v > ceil) {
-                /* Snap thumb back to ceiling — do not send the over-limit value. */
+                /* Snap thumb back to ceiling - do not send the over-limit value. */
                 voltageSetting = +ceil.toFixed(2);
                 updateVoltageUI();
             } else {
@@ -528,7 +552,7 @@
                     updateVoltageUI();
                     sendVoltage();
                 } else {
-                    /* Invalid or over-ceiling — reset field to last accepted value. */
+                    /* Invalid or over-ceiling - reset field to last accepted value. */
                     voltageEntry.value = voltageSetting.toFixed(2);
                 }
                 voltageEntry.blur();
@@ -567,6 +591,7 @@
         outputBtn.addEventListener('click', function () {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 var next = !outputEnabled;
+                flashActivity();
                 ws.send(JSON.stringify({ setOutput: next }));
                 addLog('⚡ Set output → ' + (next ? 'ON' : 'OFF'));
             }
@@ -576,6 +601,7 @@
         keypadBtn.addEventListener('click', function () {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 var next = !keypadLocked;
+                flashActivity();
                 ws.send(JSON.stringify({ setKeypad: next }));
                 addLog('⚡ Set keypad → ' + (next ? 'LOCKED' : 'UNLOCKED'));
             }
@@ -598,6 +624,7 @@
             };
 
             ws.onmessage = function (event) {
+                flashActivity();
                 try {
                     var d = JSON.parse(event.data);
 
@@ -637,7 +664,7 @@
                         redrawCurrentTicks();
                     }
 
-                    /* Topology — determines whether a Vin-derived ceiling applies */
+                    /* Topology - determines whether a Vin-derived ceiling applies */
                     if (d.converterTopology !== undefined) {
                         converterTopology = d.converterTopology;
                     }

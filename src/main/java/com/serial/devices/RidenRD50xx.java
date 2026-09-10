@@ -92,6 +92,25 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
     public static final DeviceRegister FIRMWARE_VERSION = new DeviceRegister("Firmware Version", null,
             RidenRegistersRD50xx.REG_FIRMWARE, 10);
 
+    // -------------------------------------------------------------------------
+    // Poll cache — populated by pollAll(), returned by all getters
+    // Block: 0x0000–0x000C (13 registers), see bulk-read-plan.md offset map
+    // -------------------------------------------------------------------------
+
+    private volatile double cacheVoltageSet;    // offset  0 VSET      VSET.decode()
+    private volatile double cacheCurrentSet;    // offset  1 ISET      ISET.decode()
+    private volatile double cacheVoltageOut;    // offset  2 VOUT      VOUT.decode()
+    private volatile double cacheCurrentOut;    // offset  3 IOUT      IOUT.decode()
+    private volatile double cachePowerOut;      // offset  4 POUT      POUT.decode()
+    private volatile double cacheVoltageIn;     // offset  5 VIN       VIN.decode()
+    private volatile int    cacheLock;          // offset  6 LOCK      raw
+    private volatile int    cacheProtection;    // offset  7 PROTECTION raw
+    private volatile int    cacheMode;          // offset  8 MODE      raw
+    private volatile int    cacheOutput;        // offset  9 OUTPUT    raw
+    private volatile int    cacheBacklight;     // offset 10 BACKLIGHT raw
+    private volatile int    cacheDeviceId;      // offset 11 DEVICE_ID raw
+    private volatile int    cacheFirmwareRaw;   // offset 12 FIRMWARE  raw (÷10 in getter)
+
     /**
      * Lookup map from the 4-digit model code returned by Register 0x000B to the retail model name.
      *
@@ -194,6 +213,51 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
         return this;
     }
 
+    /**
+     * Reads the full register block ({@code 0x0000–0x000C}, 13 registers) in a single Modbus
+     * {@code 0x03} frame and populates all poll-cache fields.
+     *
+     * <p>Offset map (address − {@link RidenRegistersRD50xx#REG_VSET}):</p>
+     * <pre>
+     *  [0] VSET  [1] ISET  [2] VOUT  [3] IOUT  [4] POUT  [5] VIN
+     *  [6] LOCK  [7] PROTECT [8] MODE [9] OUTPUT [10] BACKLIGHT
+     * [11] DEVICE_ID  [12] FIRMWARE
+     * </pre>
+     *
+     * <p>Scaling is delegated to {@link DeviceRegister#decode(int)} on each constant.
+     * Temperature is not available on this device family; {@link #getTemperatureCelsius()}
+     * always returns {@code -999.0}.</p>
+     *
+     * @throws Exception if the Modbus read fails
+     */
+    @Override
+    public void pollAll() throws Exception {
+        final int[] r = readBlock(RidenRegistersRD50xx.REG_VSET, 13);
+        cacheVoltageSet  = VSET.decode(r[0]);
+        cacheCurrentSet  = ISET.decode(r[1]);
+        cacheVoltageOut  = VOUT.decode(r[2]);
+        cacheCurrentOut  = IOUT.decode(r[3]);
+        cachePowerOut    = POUT.decode(r[4]);
+        cacheVoltageIn   = VIN.decode(r[5]);
+        cacheLock        = r[6];
+        cacheProtection  = r[7];
+        cacheMode        = r[8];
+        cacheOutput      = r[9];
+        cacheBacklight   = r[10];
+        cacheDeviceId    = r[11];
+        cacheFirmwareRaw = r[12];
+    }
+
+    @Override
+    public double getVoltageSet() throws Exception {
+        return cacheVoltageSet;
+    }
+
+    @Override
+    public double getCurrentSet() throws Exception {
+        return cacheCurrentSet;
+    }
+
     @Override
     public void setVoltageVerified(final double volts) throws Exception {
         writeVerified(VSET, VOUT, volts);
@@ -206,7 +270,7 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
 
     @Override
     public double getVoltage() throws Exception {
-        return read(VOUT);
+        return cacheVoltageOut;
     }
 
     @Override
@@ -221,42 +285,42 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
 
     @Override
     public double getCurrent() throws Exception {
-        return read(IOUT);
+        return cacheCurrentOut;
     }
 
     @Override
     public double getPower() throws Exception {
-        return read(POUT);
+        return cachePowerOut;
     }
 
     @Override
     public double getInputVoltage() throws Exception {
-        return read(VIN);
+        return cacheVoltageIn;
     }
 
     @Override
-    public void setOutput(boolean on) throws Exception {
+    public void setOutput(final boolean on) throws Exception {
         writeInt(OUTPUT_ENABLE, (on ? ModbusConstants.STATE_ON : ModbusConstants.STATE_OFF));
     }
 
     @Override
     public boolean getOutput() throws Exception {
-        return (readInt(OUTPUT_ENABLE) == ModbusConstants.STATE_ON);
+        return (cacheOutput == ModbusConstants.STATE_ON);
     }
 
     @Override
     public int getFirmwareVersion() throws Exception {
-        return readInt(FIRMWARE_VERSION);
+        return cacheFirmwareRaw;
     }
 
     @Override
-    public void setProtectionState(boolean on) throws Exception {
+    public void setProtectionState(final boolean on) throws Exception {
         writeInt(PROTECTION_STATE, (on ? ModbusConstants.STATE_ON : ModbusConstants.STATE_OFF));
     }
 
     @Override
     public boolean getProtectionState() throws Exception {
-        return (readInt(PROTECTION_STATE) == ModbusConstants.STATE_ON);
+        return (cacheProtection == ModbusConstants.STATE_ON);
     }
 
     /**
@@ -284,11 +348,11 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
 
     @Override
     public boolean getKeypad() throws Exception {
-        return (readInt(LOCK) == ModbusConstants.STATE_ON);
+        return (cacheLock == ModbusConstants.STATE_ON);
     }
 
     /**
-     * Returns the regulation mode.
+     * Returns the regulation mode from the poll cache.
      *
      * <p>Register {@link RidenRegistersRD50xx#REG_MODE}: 0 = CV, 1 = CC.</p>
      *
@@ -297,7 +361,7 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
      */
     @Override
     public boolean isCvMode() throws Exception {
-        return (readInt(MODE) == 0);
+        return (cacheMode == 0);
     }
 
     /**

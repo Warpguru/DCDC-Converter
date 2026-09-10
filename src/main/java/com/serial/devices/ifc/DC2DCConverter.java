@@ -149,6 +149,42 @@ public interface DC2DCConverter {
     public boolean isCvMode() throws Exception;
 
     /**
+     * Reads all registers needed for a full poll cycle in a single bulk Modbus frame per device,
+     * and stores the decoded values in internal cache fields.
+     *
+     * <p>
+     * After this method returns, all getter methods ({@link #getVoltage()}, {@link #getCurrent()},
+     * {@link #getVoltageSet()}, etc.) return the freshly cached values without issuing any
+     * additional Modbus frames. This reduces the per-cycle serial round-trips from 11 individual
+     * reads to a single {@code 0x03} multi-register request per device.
+     * </p>
+     *
+     * @throws Exception if the bulk Modbus read fails
+     */
+    public void pollAll() throws Exception;
+
+    /**
+     * Returns the cached voltage setpoint (VSET) populated by the last {@link #pollAll()} call.
+     *
+     * <p>
+     * Unlike {@link #getVoltage()}, which returns the measured output voltage (VOUT), this method
+     * returns the programmed setpoint register value.
+     * </p>
+     *
+     * @return voltage setpoint in volts
+     * @throws Exception if no poll has been performed yet and the cache is uninitialised
+     */
+    public double getVoltageSet() throws Exception;
+
+    /**
+     * Returns the cached current setpoint (ISET) populated by the last {@link #pollAll()} call.
+     *
+     * @return current setpoint in amperes
+     * @throws Exception if no poll has been performed yet and the cache is uninitialised
+     */
+    public double getCurrentSet() throws Exception;
+
+    /**
      * Closes and re-opens the serial transport at the same port and baud rate.
      *
      * <p>

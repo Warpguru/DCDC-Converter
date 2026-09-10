@@ -58,6 +58,31 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
     public static final DeviceRegister LOCK = new DeviceRegister("Keypad Lock", null,
             SinilinkRegisters.REG_KEYPAD_LOCK);
 
+    // -------------------------------------------------------------------------
+    // Poll cache — populated by pollAll(), returned by all getters
+    // Block: 0x0000–0x0012 (19 registers), see bulk-read-plan.md offset map
+    // -------------------------------------------------------------------------
+
+    private volatile double cacheVoltageSet;        // offset  0 VSET      ÷100
+    private volatile double cacheCurrentSet;        // offset  1 ISET      ÷1000
+    private volatile double cacheVoltageOut;        // offset  2 VOUT      ÷100
+    private volatile double cacheCurrentOut;        // offset  3 IOUT      ÷1000
+    private volatile double cachePowerOut;          // offset  4 POUT      ÷100
+    private volatile double cacheVoltageIn;         // offset  5 VIN       ÷100
+    private volatile int    cacheAhLow;             // offset  6 AH_LOW    raw
+    private volatile int    cacheAhHigh;            // offset  7 AH_HIGH   raw
+    private volatile int    cacheWhLow;             // offset  8 WH_LOW    raw
+    private volatile int    cacheWhHigh;            // offset  9 WH_HIGH   raw
+    private volatile int    cacheOutHours;          // offset 10 OUT_HOURS raw
+    private volatile int    cacheOutMinutes;        // offset 11 OUT_MIN   raw
+    private volatile int    cacheOutSeconds;        // offset 12 OUT_SEC   raw
+    private volatile double cacheTemperature;       // offset 13 TEMP      ÷10
+    private volatile double cacheTemperatureExt;    // offset 14 TEMP_EXT  ÷10
+    private volatile int    cacheLock;              // offset 15 LOCK      raw
+    private volatile int    cacheProtection;        // offset 16 PROTECTION raw
+    private volatile int    cacheMode;              // offset 17 MODE      raw
+    private volatile int    cacheOutput;            // offset 18 OUTPUT    raw
+
     /**
      * Lookup map from the raw model ID returned by Register 0x0016 to the retail model name.
      *
@@ -173,11 +198,56 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
     }
 
     /**
-     * Set output voltage verified.
-     * 
-     * @param volts
-     * @throws Exception
+     * Reads the full register block ({@code 0x0000–0x0012}, 19 registers) in a single Modbus
+     * {@code 0x03} frame and populates all poll-cache fields.
+     *
+     * <p>Offset map (address − {@link SinilinkRegisters#REG_VSET}):</p>
+     * <pre>
+     *  [0]  VSET   [1]  ISET   [2]  VOUT   [3]  IOUT   [4]  POUT   [5]  VIN
+     *  [6]  AH_LOW [7]  AH_HIGH [8]  WH_LOW [9]  WH_HIGH [10] OUT_H [11] OUT_M
+     * [12]  OUT_S  [13] TEMP   [14] TEMP_EXT [15] LOCK  [16] PROTECT [17] MODE
+     * [18]  OUTPUT
+     * </pre>
+     *
+     * <p>Scaling is delegated to the existing {@link DeviceRegister#decode(int)} method on each
+     * constant, so no scale factors are hardcoded here.</p>
+     *
+     * @throws Exception if the Modbus read fails
      */
+    @Override
+    public void pollAll() throws Exception {
+        final int[] r = readBlock(SinilinkRegisters.REG_VSET, 19);
+        cacheVoltageSet     = VSET.decode(r[0]);
+        cacheCurrentSet     = ISET.decode(r[1]);
+        cacheVoltageOut     = VOUT.decode(r[2]);
+        cacheCurrentOut     = IOUT.decode(r[3]);
+        cachePowerOut       = POUT.decode(r[4]);
+        cacheVoltageIn      = VIN.decode(r[5]);
+        cacheAhLow          = r[6];
+        cacheAhHigh         = r[7];
+        cacheWhLow          = r[8];
+        cacheWhHigh         = r[9];
+        cacheOutHours       = r[10];
+        cacheOutMinutes     = r[11];
+        cacheOutSeconds     = r[12];
+        cacheTemperature    = TEMP_CELSIUS.decode(r[13]);
+        cacheTemperatureExt = TEMP_CELSIUS.decode(r[14]); // same scale as internal temp
+        cacheLock           = r[15];
+        cacheProtection     = r[16];
+        cacheMode           = r[17];
+        cacheOutput         = r[18];
+    }
+
+    @Override
+    public double getVoltageSet() throws Exception {
+        return cacheVoltageSet;
+    }
+
+    @Override
+    public double getCurrentSet() throws Exception {
+        return cacheCurrentSet;
+    }
+
     @Override
     public void setVoltageVerified(final double volts) throws Exception {
         writeVerified(VSET, VOUT, volts);
@@ -190,7 +260,7 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
 
     @Override
     public double getVoltage() throws Exception {
-        return read(VOUT);
+        return cacheVoltageOut;
     }
 
     @Override
@@ -205,27 +275,27 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
 
     @Override
     public double getCurrent() throws Exception {
-        return read(IOUT);
+        return cacheCurrentOut;
     }
 
     @Override
     public double getPower() throws Exception {
-        return read(POUT);
+        return cachePowerOut;
     }
 
     @Override
     public double getInputVoltage() throws Exception {
-        return read(VIN);
+        return cacheVoltageIn;
     }
 
     @Override
-    public void setOutput(boolean on) throws Exception {
+    public void setOutput(final boolean on) throws Exception {
         writeInt(OUTPUT_ENABLE, (on ? ModbusConstants.STATE_ON : ModbusConstants.STATE_OFF));
     }
 
     @Override
     public boolean getOutput() throws Exception {
-        return (readInt(OUTPUT_ENABLE) == ModbusConstants.STATE_ON);
+        return (cacheOutput == ModbusConstants.STATE_ON);
     }
 
     @Override
@@ -234,18 +304,18 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
     }
 
     @Override
-    public void setProtectionState(boolean on) throws Exception {
+    public void setProtectionState(final boolean on) throws Exception {
         writeInt(PROTECTION_STATE, (on ? ModbusConstants.STATE_ON : ModbusConstants.STATE_OFF));
     }
 
     @Override
     public boolean getProtectionState() throws Exception {
-        return (readInt(PROTECTION_STATE) == ModbusConstants.STATE_ON);
+        return (cacheProtection == ModbusConstants.STATE_ON);
     }
 
     @Override
     public double getTemperatureCelsius() throws Exception {
-        return read(TEMP_CELSIUS);
+        return cacheTemperature;
     }
 
     @Override
@@ -255,11 +325,11 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
 
     @Override
     public boolean getKeypad() throws Exception {
-        return (readInt(LOCK) == ModbusConstants.STATE_ON);
+        return (cacheLock == ModbusConstants.STATE_ON);
     }
 
     /**
-     * Returns the regulation mode by reading {@link SinilinkRegisters#REG_MODE}.
+     * Returns the regulation mode from the poll cache.
      *
      * <p>
      * Register value: {@code 0} = CV (constant voltage), {@code 1} = CC (constant current).
@@ -270,7 +340,7 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
      */
     @Override
     public boolean isCvMode() throws Exception {
-        return (readInt(MODE) == 0);
+        return (cacheMode == 0);
     }
 
     public int getHardwareVersion() throws Exception {
