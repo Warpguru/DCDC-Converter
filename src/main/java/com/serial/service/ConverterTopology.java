@@ -1,7 +1,7 @@
 package com.serial.service;
 
 /**
- * Power-converter topology — describes whether the output voltage is constrained by the input
+ * Power-converter topology - describes whether the output voltage is constrained by the input
  * voltage.
  *
  * <p>

@@ -24,11 +24,11 @@ import com.serial.modbus.ModbusTransport;
  *
  * <ul>
  * <li>Default baud rate: 9600 baud (RD60xx defaults to 115200 baud).</li>
- * <li>Model ID at Register 0x000B — 4-digit short code (e.g. {@code 5020}).
+ * <li>Model ID at Register 0x000B - 4-digit short code (e.g. {@code 5020}).
  *     On the RD60xx, Register 0x0000 is the model register; on the DPS series, Register 0x0000
  *     is {@code VSET}.</li>
  * <li>Firmware at Register 0x000C ({@code VERSON}), raw value / 100.0 = version (e.g.
- *     {@code 170} = v1.70). Several DPS5020 factory batches always return {@code 0} — this
+ *     {@code 170} = v1.70). Several DPS5020 factory batches always return {@code 0} - this
  *     is a known hardware limitation, not a protocol or scaling bug.</li>
  * </ul>
  *
@@ -72,7 +72,7 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
     public static final DeviceRegister OUTPUT_ENABLE = new DeviceRegister("Output Enable", null,
             RidenRegistersRD50xx.REG_OUTPUT_ENABLE);
 
-    /** B_LED — Backlight brightness level (0 = darkest, 5 = brightest). */
+    /** B_LED - Backlight brightness level (0 = darkest, 5 = brightest). */
     public static final DeviceRegister BACKLIGHT = new DeviceRegister("Backlight Level", null,
             RidenRegistersRD50xx.REG_BACKLIGHT);
 
@@ -84,7 +84,7 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
      *
      * <p>
      * Raw register value / 10.0 = firmware version (e.g. {@code 17} = v1.7, {@code 19} = v1.9).
-     * Several DPS5020 factory batches always return {@code 0} from this register — this is a known
+     * Several DPS5020 factory batches always return {@code 0} from this register - this is a known
      * hardware limitation, not a scaling bug. A result of {@code 0} should be treated as "firmware
      * version unknown" rather than "v0.0".
      * </p>
@@ -168,7 +168,7 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
                         }
                         this.manufacturer = "Ruideng";
                         this.device = modelName;
-                        // fw == 0 is normal on DPS5020 factory batches — not a read error.
+                        // fw == 0 is normal on DPS5020 factory batches - not a read error.
                         final String fwStr = (fw == 0) ? "unknown" : ("v" + String.format("%.1f", fw / 10.0));
                         logger.info("Detected Ruideng DPS/RD50xx (Model: {}, FW: {}) at {} baud.", this.device, fwStr, baud);
                     }

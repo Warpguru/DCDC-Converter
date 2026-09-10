@@ -283,8 +283,8 @@ public class ModbusTransport {
      *
      * <p>Log levels:</p>
      * <ul>
-     * <li>Raw hex bytes (TX/RX) → {@code DEBUG} — visible in the log file, suppressed on the console.</li>
-     * <li>Decoded annotation ({@code -> Value = …}) → {@code TRACE} — log file only, deepest detail.</li>
+     * <li>Raw hex bytes (TX/RX) → {@code DEBUG} - visible in the log file, suppressed on the console.</li>
+     * <li>Decoded annotation ({@code -> Value = …}) → {@code TRACE} - log file only, deepest detail.</li>
      * </ul>
      *
      * <p>Example output:</p>
@@ -301,7 +301,7 @@ public class ModbusTransport {
      */
     @Deprecated
     void log(final String dir, final byte[] data, final String hint) {
-        // Raw hex bytes at DEBUG — file only, not on console.
+        // Raw hex bytes at DEBUG - file only, not on console.
         if (logger.isDebugEnabled()) {
             StringBuilder sb = new StringBuilder(dir).append("  ");
             for (byte b : data)
@@ -309,7 +309,7 @@ public class ModbusTransport {
             logger.debug(sb.toString());
         }
 
-        // Decoded annotation at TRACE — file only, deepest detail level.
+        // Decoded annotation at TRACE - file only, deepest detail level.
         if (logger.isTraceEnabled()) {
             String auto = decodeFrame(dir, data);
             if (auto != null || hint != null) {

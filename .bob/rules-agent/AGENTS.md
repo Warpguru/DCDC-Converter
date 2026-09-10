@@ -12,8 +12,8 @@
 - **Device properties files** live at `src/main/resources/devices/<DeviceName>.properties` where `DeviceName` matches `getDevice()` return value (e.g. `XY6008`, `RD5020`, `RD6020`).
 - **Setpoint writes use `PUT`, not `POST`** - only `clearProtection` and `exit` use `POST`.
 - **DTO inner classes (`VoltageRequest`, `LimitsResponse`, etc.) live inside `RestService`** as `public static` nested classes.
-- **String literals used in logic must be named constants** — e.g. `ERR_SERIAL_TIMEOUT` in `DeviceService`, `KEY_*` in `WebSocketService`. Never branch on a bare string literal.
-- **`demoVoltages()` body is intentionally empty** — `@Deprecated`, call site removed; never call it and never delete it.
+- **String literals used in logic must be named constants** - e.g. `ERR_SERIAL_TIMEOUT` in `DeviceService`, `KEY_*` in `WebSocketService`. Never branch on a bare string literal.
+- **`demoVoltages()` body is intentionally empty** - `@Deprecated`, call site removed; never call it and never delete it.
 - **Riden RD50xx current/power scale is 100** (not 1000) - `ISET`/`IOUT` in A×100, `POUT` in W×100. Sinilink current scale is 1000.
 - **`DeviceService.setVoltage()`/`setCurrent()` use plain `write()`, not `writeVerified()`** - `writeVerified()` adds ~600 ms latency from its read-back retry loop; avoid it for setpoints.
 - **WS message keys are named constants** in `WebSocketService` (`KEY_SET_CURRENT`, `KEY_SET_VOLTAGE`, `KEY_SET_OUTPUT`, `KEY_SET_KEYPAD`) - always use these constants, never bare string literals.

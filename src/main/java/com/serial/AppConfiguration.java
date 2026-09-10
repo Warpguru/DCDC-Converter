@@ -14,15 +14,15 @@ import org.slf4j.LoggerFactory;
  * Configuration is resolved in two layers:
  * </p>
  * <ol>
- * <li><strong>Classpath defaults</strong> — {@code credentials.properties} bundled inside the JAR. Contains the built-in exit
+ * <li><strong>Classpath defaults</strong> - {@code credentials.properties} bundled inside the JAR. Contains the built-in exit
  * credentials ({@code serialcontroller.admin.username}, {@code serialcontroller.admin.password}).</li>
- * <li><strong>External override file</strong> (optional) — a fully-qualified path supplied as the second command-line argument.
+ * <li><strong>External override file</strong> (optional) - a fully-qualified path supplied as the second command-line argument.
  * Every property present in that file overwrites the classpath default. In addition to overriding credentials, the external
  * file may specify:
  * <ul>
- * <li>{@code serialcontroller.host} — hostname or IP address the server binds to (default: {@value #DEFAULT_HOST})</li>
- * <li>{@code serialcontroller.port} — TCP port the HTTP/WebSocket server listens on (default: {@value #DEFAULT_PORT})</li>
- * <li>{@code serialcontroller.log.level} — Log4j2 log level applied to the {@code com.serial} logger at startup, overriding
+ * <li>{@code serialcontroller.host} - hostname or IP address the server binds to (default: {@value #DEFAULT_HOST})</li>
+ * <li>{@code serialcontroller.port} - TCP port the HTTP/WebSocket server listens on (default: {@value #DEFAULT_PORT})</li>
+ * <li>{@code serialcontroller.log.level} - Log4j2 log level applied to the {@code com.serial} logger at startup, overriding
  * {@code log4j2.xml}. Valid values (case-insensitive): {@code TRACE}, {@code DEBUG}, {@code INFO}, {@code WARN}, {@code ERROR},
  * {@code FATAL}, {@code OFF}. Absent or blank means "keep the level from {@code log4j2.xml}".</li>
  * </ul>
@@ -91,7 +91,7 @@ public class AppConfiguration {
         try {
             return Integer.parseInt(raw);
         } catch (NumberFormatException e) {
-            logger.warn("Invalid value for '{}': '{}' — using default {}", KEY_PORT, raw, DEFAULT_PORT);
+            logger.warn("Invalid value for '{}': '{}' - using default {}", KEY_PORT, raw, DEFAULT_PORT);
             return DEFAULT_PORT;
         }
     }
@@ -134,7 +134,7 @@ public class AppConfiguration {
     private void loadClasspathDefaults() {
         try (InputStream in = AppConfiguration.class.getResourceAsStream(CLASSPATH_DEFAULTS)) {
             if (in == null) {
-                logger.warn("Classpath resource '{}' not found — no default credentials available.", CLASSPATH_DEFAULTS);
+                logger.warn("Classpath resource '{}' not found - no default credentials available.", CLASSPATH_DEFAULTS);
                 return;
             }
             props.load(in);

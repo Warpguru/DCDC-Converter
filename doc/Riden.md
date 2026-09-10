@@ -69,7 +69,7 @@ The primary registers for the RD6012P handle its dynamic precision swapping mech
 | 0x0000 | 0 | Read Only | Model ID | Returns 60125 for RD6012P |
 | 0x0001 | 1 | Read Only | Firmware Version | Value / 100.0 (e.g., 141 = v1.41) |
 | 0x0002 | 2 | Read Only | Current Range Status | 0 = Low Range (0–6A), 1 = High Range (6–12A) |
-| 0x0008 | 8 | Read/Write | Voltage Setpoint (V-SET) | Value / 1000.0 (Fixed 3 decimal places — e.g., 60000 = 60.000V) |
+| 0x0008 | 8 | Read/Write | Voltage Setpoint (V-SET) | Value / 1000.0 (Fixed 3 decimal places - e.g., 60000 = 60.000V) |
 | 0x0009 | 9 | Read/Write | Current Setpoint (I-SET) | Dynamic scaling based on current range status (see below) |
 | 0x000A | 10 | Read Only | Output Voltage (V-OUT) | Value / 1000.0 (Fixed 3 decimal places) |
 | 0x000B | 11 | Read Only | Output Current (I-OUT) | Dynamic scaling based on current range status (see below) |

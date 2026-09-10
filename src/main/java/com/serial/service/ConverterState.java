@@ -147,7 +147,7 @@ public class ConverterState {
     // -------------------------------------------------------------------------
 
     /**
-     * Power-converter topology — controls whether a Vin-derived voltage ceiling is enforced.
+     * Power-converter topology - controls whether a Vin-derived voltage ceiling is enforced.
      *
      * <p>Defaults to {@link ConverterTopology#BUCK_BOOST} (no restriction) when the property is absent.</p>
      */
@@ -587,7 +587,7 @@ public class ConverterState {
     }
 
     /**
-     * Sets the converter topology. Package-private — only {@link DeviceService} may call this.
+     * Sets the converter topology. Package-private - only {@link DeviceService} may call this.
      *
      * @param converterTopology topology to set; must not be {@code null}
      */

@@ -200,7 +200,7 @@ public class SerialController {
         }
         final Level level = Level.getLevel(levelStr.toUpperCase());
         if (level == null) {
-            logger.warn("Unrecognised log level '{}' in configuration — keeping log4j2.xml level.", levelStr);
+            logger.warn("Unrecognised log level '{}' in configuration - keeping log4j2.xml level.", levelStr);
             return;
         }
 
@@ -228,7 +228,7 @@ public class SerialController {
         javalinLoggerCfg.removeAppender("ConsoleAppender");
         javalinLoggerCfg.addAppender(cfg.getAppender("ConsoleAppender"), javalinConsoleLevel, javalinConsoleFilter);
 
-        // Commit all changes — propagates the updated level to all live Logger instances
+        // Commit all changes - propagates the updated level to all live Logger instances
         // that inherit from the modified LoggerConfigs.
         ctx.updateLoggers();
 
