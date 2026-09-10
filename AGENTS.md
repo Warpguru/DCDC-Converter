@@ -108,8 +108,8 @@ Application runs for 600 s then shuts down; `/api/exit` wakes it early via `shut
 - `final` on **all** method parameters is the project convention.
 - Javadoc is mandatory on all public/protected members; include `<p>`, `<pre>`, `<ul>` examples where relevant.
 - DTO and inner classes (e.g. `VoltageRequest`, `LimitsResponse`) live as `public static` inner classes of their owning service.
-- **String literals that appear in logic must be named constants** — e.g. `ERR_SERIAL_TIMEOUT`, `KEY_SET_CURRENT`. Never compare against or branch on a bare string literal.
-- **Web Interface**: plain HTML, minimal CSS, JavaScript only when HTML cannot do it — no JS libraries.
+- **String literals that appear in logic must be named constants** - e.g. `ERR_SERIAL_TIMEOUT`, `KEY_SET_CURRENT`. Never compare against or branch on a bare string literal.
+- **Web Interface**: plain HTML, minimal CSS, JavaScript only when HTML cannot do it - no JS libraries.
 
 ## Duplicate / Legacy Code
 

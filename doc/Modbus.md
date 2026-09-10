@@ -1,4 +1,4 @@
-# Modbus RTU — Register Read and Write Reference
+# Modbus RTU - Register Read and Write Reference
 
 This document describes the three Modbus RTU function codes used by the devices in this project and provides worked frame examples for each. It is the reference for any implementation work in `ModbusTransport`.
 
@@ -48,7 +48,7 @@ for (byte b : data) {
 
 ---
 
-## 0x03 — Read Holding Registers
+## 0x03 - Read Holding Registers
 
 Reads one or more consecutive 16-bit holding registers.
 
@@ -86,7 +86,7 @@ Total response length = **3 + (count × 2) + 2** bytes.
 
 ---
 
-### Example A — Read one register (VOUT on Sinilink, address 0x0002)
+### Example A - Read one register (VOUT on Sinilink, address 0x0002)
 
 **Request** (8 bytes):
 
@@ -98,7 +98,7 @@ Total response length = **3 + (count × 2) + 2** bytes.
 slave=0x01
 ```
 
-**Response** (7 bytes) — device reports 5.00 V (raw = 500 = 0x01F4):
+**Response** (7 bytes) - device reports 5.00 V (raw = 500 = 0x01F4):
 
 ```
 01  03  02  01 F4  B9 30
@@ -113,7 +113,7 @@ Decoded: `500 / 100 = 5.00 V`
 
 ---
 
-### Example B — Read two consecutive registers (VOUT + IOUT on Sinilink, addresses 0x0002–0x0003)
+### Example B - Read two consecutive registers (VOUT + IOUT on Sinilink, addresses 0x0002–0x0003)
 
 **Request** (8 bytes):
 
@@ -125,7 +125,7 @@ Exact bytes: `01 03 00 02 00 02 65 CB`
 
 > **Note:** The CRC in the examples above uses the actual Modbus CRC for those exact byte sequences. Always recalculate for your specific register/count combination.
 
-**Response** (9 bytes) — 5.00 V, 1.500 A:
+**Response** (9 bytes) - 5.00 V, 1.500 A:
 
 ```
 01  03  04  01 F4  05 DC  xx xx
@@ -140,7 +140,7 @@ Decoded:
 
 ---
 
-## 0x06 — Write Single Register
+## 0x06 - Write Single Register
 
 Writes a 16-bit value to one register. The slave echoes the entire request frame back unchanged as confirmation.
 
@@ -165,7 +165,7 @@ Identical to the request (8 bytes). If the write failed the slave returns an err
 
 ---
 
-### Example C — Set voltage to 12.00 V on Sinilink (VSET = 0x0000, raw = 1200 = 0x04B0)
+### Example C - Set voltage to 12.00 V on Sinilink (VSET = 0x0000, raw = 1200 = 0x04B0)
 
 **Request** (8 bytes):
 
@@ -177,7 +177,7 @@ Identical to the request (8 bytes). If the write failed the slave returns an err
 slave=0x01
 ```
 
-**Response** (8 bytes — echo):
+**Response** (8 bytes - echo):
 
 ```
 01  06  00 00  04 B0  48 3B
@@ -187,7 +187,7 @@ Decoded: `1200 / 100 = 12.00 V`
 
 ---
 
-### Example D — Enable output on RidenRD60xx (OUTPUT_ENABLE = 0x0012, value = 1)
+### Example D - Enable output on RidenRD60xx (OUTPUT_ENABLE = 0x0012, value = 1)
 
 **Request** (8 bytes):
 
@@ -199,7 +199,7 @@ Decoded: `1200 / 100 = 12.00 V`
 slave=0x01
 ```
 
-**Response** (8 bytes — echo):
+**Response** (8 bytes - echo):
 
 ```
 01  06  00 12  00 01  E8 0F
@@ -207,7 +207,7 @@ slave=0x01
 
 ---
 
-## 0x10 — Write Multiple Registers
+## 0x10 - Write Multiple Registers
 
 Writes 16-bit values to a **contiguous block** of registers in one frame. Useful when two or more adjacent registers must be updated together (e.g. VSET + ISET).
 
@@ -249,7 +249,7 @@ Fixed 8-byte acknowledgement. Echoes the starting address and quantity written.
 
 ---
 
-### Example E — Set VSET + ISET together on Sinilink (addresses 0x0000–0x0001): 5.00 V, 2.500 A
+### Example E - Set VSET + ISET together on Sinilink (addresses 0x0000–0x0001): 5.00 V, 2.500 A
 
 Sinilink scales: voltage ×100, current ×1000.
 
@@ -279,7 +279,7 @@ slave=0x01
 
 ---
 
-### Example F — Set VSET + ISET together on RidenRD60xx (addresses 0x0008–0x0009): 12.00 V, 1.000 A
+### Example F - Set VSET + ISET together on RidenRD60xx (addresses 0x0008–0x0009): 12.00 V, 1.000 A
 
 RidenRD60xx scales: voltage ×100, current ×1000.
 
@@ -317,11 +317,11 @@ slave=0x01
 | 0x0003  | IOUT      | R      | ×1000 | Measured current    |
 | 0x0004  | POUT      | R      | ×100  | Measured power      |
 | 0x0005  | VIN       | R      | ×100  | Input voltage       |
-| 0x000F  | LOCK      | R/W    | —     | Keypad lock (0/1)   |
-| 0x0010  | PROTECTION| R/W    | —     | Protection state    |
-| 0x0012  | OUTPUT    | R/W    | —     | Output enable (0/1) |
-| 0x0016  | MODEL     | R      | —     | Model identifier    |
-| 0x0017  | FIRMWARE  | R      | —     | Firmware version    |
+| 0x000F  | LOCK      | R/W    | -     | Keypad lock (0/1)   |
+| 0x0010  | PROTECTION| R/W    | -     | Protection state    |
+| 0x0012  | OUTPUT    | R/W    | -     | Output enable (0/1) |
+| 0x0016  | MODEL     | R      | -     | Model identifier    |
+| 0x0017  | FIRMWARE  | R      | -     | Firmware version    |
 
 ### Riden RD50xx
 
@@ -333,33 +333,33 @@ slave=0x01
 | 0x0003  | IOUT      | R      | ×100  | Measured current    |
 | 0x0004  | POUT      | R      | ×100  | Measured power      |
 | 0x0005  | VIN       | R      | ×100  | Input voltage       |
-| 0x0006  | LOCK      | R/W    | —     | Keypad lock (0/1)   |
-| 0x0007  | PROTECTION| R      | —     | Protection state    |
-| 0x0009  | OUTPUT    | R/W    | —     | Output enable (0/1) |
-| 0x000B  | DEVICE_ID | R      | —     | Model identifier    |
+| 0x0006  | LOCK      | R/W    | -     | Keypad lock (0/1)   |
+| 0x0007  | PROTECTION| R      | -     | Protection state    |
+| 0x0009  | OUTPUT    | R/W    | -     | Output enable (0/1) |
+| 0x000B  | DEVICE_ID | R      | -     | Model identifier    |
 | 0x0014  | FIRMWARE  | R      | ÷100  | Firmware version    |
 
 ### Riden RD60xx
 
 | Address | Name      | Access | Scale | Description         |
 |---------|-----------|--------|-------|---------------------|
-| 0x0000  | DEVICE_ID | R      | —     | Model identifier    |
+| 0x0000  | DEVICE_ID | R      | -     | Model identifier    |
 | 0x0003  | FIRMWARE  | R      | ÷100  | Firmware version    |
 | 0x0008  | VSET      | R/W    | ×100  | Voltage setpoint    |
 | 0x0009  | ISET      | R/W    | ×1000 | Current setpoint    |
 | 0x000A  | VOUT      | R      | ×100  | Measured voltage    |
 | 0x000B  | IOUT      | R      | ×1000 | Measured current    |
-| 0x000D  | POUT      | R      | ×100  | Measured power (÷1000 in driver — see AGENTS.md) |
+| 0x000D  | POUT      | R      | ×100  | Measured power (÷1000 in driver - see AGENTS.md) |
 | 0x000E  | VIN       | R      | ×100  | Input voltage       |
-| 0x000F  | LOCK      | R/W    | —     | Keypad lock (0/1)   |
-| 0x0010  | PROTECTION| R      | —     | Protection state    |
-| 0x0012  | OUTPUT    | R/W    | —     | Output enable (0/1) |
+| 0x000F  | LOCK      | R/W    | -     | Keypad lock (0/1)   |
+| 0x0010  | PROTECTION| R      | -     | Protection state    |
+| 0x0012  | OUTPUT    | R/W    | -     | Output enable (0/1) |
 
 ---
 
 ## Key Observations for this Codebase
 
 - **VSET and ISET are always at consecutive addresses** (VSET, VSET+1) on all three devices. A single `0x10` frame can therefore set both in one serial round-trip instead of two.
-- **`0x10` with `qty=1`** is functionally equivalent to `0x06` but produces a shorter acknowledgement (8 bytes vs 8 bytes — identical). Prefer `0x06` for single-register writes; it is simpler.
+- **`0x10` with `qty=1`** is functionally equivalent to `0x06` but produces a shorter acknowledgement (8 bytes vs 8 bytes - identical). Prefer `0x06` for single-register writes; it is simpler.
 - The **`0x10` response is always 8 bytes** regardless of how many registers were written. Plan `readBytes(8)` after transmitting a multi-write frame.
 - The **`0x03` response length** is variable: `3 + (count × 2) + 2` bytes. Calculate it from the requested count before reading.

@@ -714,13 +714,13 @@ public class DeviceService {
     private ConverterTopology parseTopology(final Properties props) {
         final String raw = props.getProperty(PROP_TOPOLOGY);
         if (raw == null) {
-            logger.warn("Property '{}' not found — defaulting to {}", PROP_TOPOLOGY, ConverterTopology.BUCK_BOOST);
+            logger.warn("Property '{}' not found - defaulting to {}", PROP_TOPOLOGY, ConverterTopology.BUCK_BOOST);
             return ConverterTopology.BUCK_BOOST;
         }
         try {
             return ConverterTopology.valueOf(raw.trim().toUpperCase().replace('/', '_').replace('-', '_'));
         } catch (IllegalArgumentException e) {
-            logger.warn("Unknown topology value '{}' — defaulting to {}", raw, ConverterTopology.BUCK_BOOST);
+            logger.warn("Unknown topology value '{}' - defaulting to {}", raw, ConverterTopology.BUCK_BOOST);
             return ConverterTopology.BUCK_BOOST;
         }
     }

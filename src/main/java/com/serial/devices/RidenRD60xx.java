@@ -56,10 +56,10 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
     //   Current reads/writes in the low range are off by 10x. See doc/Riden.md.
     public static final DeviceRegister ISET = new DeviceRegister("Current Setpoint", "A", RidenRegistersRD60xx.REG_ISET, 1000);
 
-    // TODO(P-series): See VSET note above — P-series voltage scale is 1000, not 100.
+    // TODO(P-series): See VSET note above - P-series voltage scale is 1000, not 100.
     public static final DeviceRegister VOUT = new DeviceRegister("Output Voltage", "V", RidenRegistersRD60xx.REG_VOUT, 100);
 
-    // TODO(P-series): See ISET note above — P-series current scale is dynamic (10000 or 1000).
+    // TODO(P-series): See ISET note above - P-series current scale is dynamic (10000 or 1000).
     public static final DeviceRegister IOUT = new DeviceRegister("Output Current", "A", RidenRegistersRD60xx.REG_IOUT, 1000);
 
     public static final DeviceRegister AH = new DeviceRegister("Accumulated Amperehours", "Ah", RidenRegistersRD60xx.REG_AH);
@@ -181,7 +181,7 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
                 transport = new ModbusTransport(portName, baud);
                 logger.debug("Trying baud rate {}", baud);
 
-                // Probe Device ID register (0x0000) — returns a 5-digit model+revision code
+                // Probe Device ID register (0x0000) - returns a 5-digit model+revision code
                 try {
                     int deviceId = getDeviceId();
                     // INFO level intentional: raw ID must be visible without DEBUG mode for live-device
