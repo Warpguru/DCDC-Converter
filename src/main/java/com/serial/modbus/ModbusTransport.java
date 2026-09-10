@@ -278,19 +278,21 @@ public class ModbusTransport {
     }
 
     /**
-     * Logs a Modbus frame via SLF4J at INFO level, automatically appending a human-readable
-     * annotation decoded from the frame bytes themselves.
+     * Logs a Modbus frame via SLF4J, automatically appending a human-readable annotation
+     * decoded from the frame bytes themselves.
      *
-     * <p>For TX frames the register address (and written value for fc=0x06) are decoded from
-     * bytes[2..3] and bytes[4..5] respectively. An optional caller-supplied {@code hint} is
-     * appended after the auto-decoded part.</p>
+     * <p>Log levels:</p>
+     * <ul>
+     * <li>Raw hex bytes (TX/RX) → {@code DEBUG} — visible in the log file, suppressed on the console.</li>
+     * <li>Decoded annotation ({@code -> Value = …}) → {@code TRACE} — log file only, deepest detail.</li>
+     * </ul>
      *
      * <p>Example output:</p>
      * <pre>
-     * TX  01 03 00 17 00 01 34 0E  (read reg 0x0017)
-     * RX  01 03 02 00 6E B8 C2     (rx 3 data bytes)
-     * TX  01 06 00 00 01 F4 48 3B  (write reg 0x0000 = 500)
-     * RX  01 06 00 00 01 F4 48 3B  (write reg 0x0000 = 500)
+     * DEBUG TX  01 03 00 17 00 01 34 0E
+     * TRACE     -> Read 0x0017
+     * DEBUG RX  01 03 02 00 6E B8 C2
+     * TRACE     -> Value = 110 (0x006E)
      * </pre>
      *
      * @param dir  direction label, e.g. {@code "TX"} or {@code "RX"}
@@ -299,20 +301,24 @@ public class ModbusTransport {
      */
     @Deprecated
     void log(final String dir, final byte[] data, final String hint) {
-        // First line: raw hex bytes at INFO - always visible.
-        StringBuilder sb = new StringBuilder(dir).append("  ");
-        for (byte b : data)
-            sb.append(String.format("%02X ", b));
-        logger.info(sb.toString());
+        // Raw hex bytes at DEBUG — file only, not on console.
+        if (logger.isDebugEnabled()) {
+            StringBuilder sb = new StringBuilder(dir).append("  ");
+            for (byte b : data)
+                sb.append(String.format("%02X ", b));
+            logger.debug(sb.toString());
+        }
 
-        // Second line: human-readable annotation at DEBUG - visible only when debug is enabled.
-        String auto = decodeFrame(dir, data);
-        if (auto != null || hint != null) {
-            StringBuilder detail = new StringBuilder("    -> ");
-            if (auto != null) detail.append(auto);
-            if (auto != null && hint != null) detail.append(", ");
-            if (hint != null) detail.append(hint);
-            logger.debug(detail.toString());
+        // Decoded annotation at TRACE — file only, deepest detail level.
+        if (logger.isTraceEnabled()) {
+            String auto = decodeFrame(dir, data);
+            if (auto != null || hint != null) {
+                StringBuilder detail = new StringBuilder("    -> ");
+                if (auto != null) detail.append(auto);
+                if (auto != null && hint != null) detail.append(", ");
+                if (hint != null) detail.append(hint);
+                logger.trace(detail.toString());
+            }
         }
     }
 

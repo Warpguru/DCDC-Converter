@@ -426,9 +426,21 @@ public class DeviceService {
         } else if (converter instanceof RidenRD50xx r) {
             deviceName = r.getDevice();
             state.setManufacturer(r.getManufacturer());
+            try {
+                final int rawFw = r.getFirmwareVersion();
+                state.setFirmwareVersion(rawFw == 0 ? "" : ("v" + String.format("%.1f", rawFw / 10.0)));
+            } catch (Exception e) {
+                logger.warn("Could not read RD50xx firmware version: {}", e.getMessage());
+            }
         } else if (converter instanceof RidenRD60xx r) {
             deviceName = r.getDevice();
             state.setManufacturer(r.getManufacturer());
+            try {
+                final int rawFw = r.getFirmwareVersion();
+                state.setFirmwareVersion(rawFw == 0 ? "" : ("v" + String.format("%.2f", rawFw / 100.0)));
+            } catch (Exception e) {
+                logger.warn("Could not read RD60xx firmware version: {}", e.getMessage());
+            }
         }
 
         if (deviceName == null) {

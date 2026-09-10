@@ -11,6 +11,8 @@ import io.javalin.http.staticfiles.Location;
 import io.javalin.openapi.plugin.OpenApiPlugin;
 import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,10 +37,13 @@ import org.slf4j.LoggerFactory;
  * <li>Iteration 7 - {@link WebSocketService}: WebSocket handler extracted from app; full state push.</li>
  * </ul>
  */
-public class SerialControllerApp {
+public class SerialController {
 
-    private static final Logger logger = LoggerFactory.getLogger(SerialControllerApp.class);
+    private static final Logger logger = LoggerFactory.getLogger(SerialController.class);
 
+    /** Serial Controller version (keep in sync with pom.xml). */
+    public static final String SERIALCONTROLLER_VERSION = "1.0.0";
+    
     /** The service layer - owns the converter, polling thread, and ConverterState. */
     private DeviceService deviceService;
 
@@ -52,19 +57,40 @@ public class SerialControllerApp {
     private final Object shutdownLock = new Object();
 
     public static void main(final String[] args) throws Exception {
-        logger.info("Serial Controller started.");
-        SerialControllerApp app = new SerialControllerApp();
+        logger.info("Serial Controller - Control Riden/Ruideng and Sinilink DC/DC converters v{}", SERIALCONTROLLER_VERSION);
+        logger.info("");
+        logger.info("                  (C) by Roman Stangl 09, 2026 (Roman.Stangl@gmx.net)");
+        logger.info("                  http://warpguru.bplaced.net/");
+        logger.info("");
+        SerialController app = new SerialController();
         app.process(args);
-        logger.info("Serial Controller finished.");
     }
 
     private void process(final String[] args) throws Exception {
-        if (args.length == 0) {
-            System.out.println("Usage: SerialController <port>");
+        if (args.length == 0 || args.length > 2) {
+            System.out.println("Usage:");
+            System.out.println("  java -jar SerialController.jar <port> [config-file]");
+            System.out.println("Where:");
+            System.out.println("  <port>        Serial port name, e.g. COM3 or /dev/ttyUSB0");
+            System.out.println("  [config-file] Optional: fully-qualified path to a properties file.");
+            System.out.println("                Overrides credentials.properties defaults and may specify:");
+            System.out.println("                  serialcontroller.host           Hostname/IP the server binds to");
+            System.out.println("                  serialcontroller.port           TCP port the server listens on");
+            System.out.println("                  serialcontroller.log.level      Log level (TRACE/DEBUG/INFO/WARN/ERROR)");
+            System.out.println("                  serialcontroller.admin.username Username for GUI administration");
+            System.out.println("                  serialcontroller.admin.password Password for GUI administration");
             return;
         }
+        logger.info("Serial Controller started.");
 
-        final String portName = args[0];
+        final String portName        = args[0];
+        final String externalConfig  = (args.length == 2) ? args[1] : null;
+
+        // Load configuration: classpath defaults overlaid with optional external file.
+        final AppConfiguration config = new AppConfiguration(externalConfig);
+
+        // Apply log level override before any further logging.
+        applyLogLevel(config.getLogLevel());
 
         // Enumerate serial ports for diagnostics.
         logger.info("Enumerating serial ports...");
@@ -87,19 +113,20 @@ public class SerialControllerApp {
         deviceService    = new DeviceService(portName);
         webSocketService = new WebSocketService(deviceService, deviceService.getObjectMapper());
 
-        final RestService restService = new RestService(deviceService);
+        final RestService restService = new RestService(deviceService, config);
 
-        Javalin javalin = Javalin.create(config -> {
-            config.jetty.port = 8000;
+        final int serverPort = config.getPort();
+        Javalin javalin = Javalin.create(cfg -> {
+            cfg.jetty.port = serverPort;
 
             // Serve ./public/* at /
-            config.staticFiles.add("/public", Location.CLASSPATH);
+            cfg.staticFiles.add("/public", Location.CLASSPATH);
 
             // REST API routes
-            restService.registerRoutes(config.routes);
+            restService.registerRoutes(cfg.routes);
 
             // WebSocket endpoint - all handling delegated to WebSocketService
-            config.routes.ws("/ws/data", ws -> {
+            cfg.routes.ws("/ws/data", ws -> {
                 ws.onConnect(webSocketService::onConnect);
                 ws.onMessage(webSocketService::onMessage);
                 ws.onClose(webSocketService::onClose);
@@ -107,7 +134,7 @@ public class SerialControllerApp {
             });
 
             // OpenAPI JSON endpoint at /openapi
-            config.registerPlugin(new OpenApiPlugin(openApiConfig -> {
+            cfg.registerPlugin(new OpenApiPlugin(openApiConfig -> {
                 openApiConfig.withDocumentationPath("/openapi");
                 openApiConfig.withDefinitionConfiguration((version, definition) -> {
                     definition.info(info -> info.title("SerialController").version("1.0.0"));
@@ -116,12 +143,12 @@ public class SerialControllerApp {
             }));
 
             // Swagger UI at /openapi/ui
-            config.registerPlugin(new SwaggerPlugin(swaggerConfig -> {
+            cfg.registerPlugin(new SwaggerPlugin(swaggerConfig -> {
                 swaggerConfig.withDocumentationPath("/openapi");
                 swaggerConfig.withUiPath("/openapi/ui");
             }));
 
-        }).start(8000);
+        }).start(serverPort);
 
         // Give the exit handler a reference to shut down the server and wake the main thread.
         restService.setShutdown(javalin, () -> {
@@ -142,6 +169,36 @@ public class SerialControllerApp {
         webSocketService.stop();
         deviceService.stop();
         javalin.stop();
+        logger.info("Serial Controller finished.");
+    }
+
+    /**
+     * Applies the {@code serialcontroller.log.level} override to the {@code com.serial} logger.
+     *
+     * <p>
+     * Uses the Log4j2 {@link Configurator} API to adjust the level at runtime without reloading the
+     * entire {@code log4j2.xml} configuration. The override affects only the {@code com.serial}
+     * package logger so third-party library log levels are unaffected.
+     * </p>
+     *
+     * <p>
+     * If the value is blank or not a recognised Log4j2 level name the method logs a warning and
+     * leaves the level unchanged.
+     * </p>
+     *
+     * @param levelStr level name from the config file, e.g. {@code "DEBUG"}; blank to skip
+     */
+    private static void applyLogLevel(final String levelStr) {
+        if (levelStr == null || levelStr.isBlank()) {
+            return;
+        }
+        final Level level = Level.getLevel(levelStr.toUpperCase());
+        if (level == null) {
+            logger.warn("Unrecognised log level '{}' in configuration — keeping log4j2.xml level.", levelStr);
+            return;
+        }
+        Configurator.setLevel("com.serial", level);
+        logger.info("Log level for com.serial set to {} (from configuration).", level);
     }
 
     /**
@@ -176,26 +233,6 @@ public class SerialControllerApp {
     }
 
     /**
-     * Demo method for setting output voltage - kept for reference only.
-     *
-     * <p>
-     * This method is no longer called. It was removed from {@link #process(String[])} in Iteration 5
-     * because it opens its own {@code ModbusTransport}, which conflicts with {@link DeviceService}
-     * holding exclusive transport ownership. Retained here with {@code @Deprecated} per project
-     * convention. Full resolution in Iteration 9.
-     * </p>
-     *
-     * @param portName port to use (unused - kept for signature compatibility)
-     * @throws Exception never in normal operation; inherited from old implementation
-     */
-    @Deprecated
-    @SuppressWarnings("unused")
-    private void demoVoltages(@Deprecated final String portName) throws Exception {
-        // Removed call site in Iteration 5 - see class Javadoc.
-        // This method conflicts with DeviceService transport ownership and must not be called.
-    }
-
-    /**
      * Returns the given value if it is non-null and non-empty, otherwise {@code "N/A"}.
      *
      * @param value the value to check
@@ -204,4 +241,5 @@ public class SerialControllerApp {
     private String valueOrNA(final String value) {
         return (value != null && !value.isEmpty()) ? value : "N/A";
     }
+    
 }
