@@ -202,6 +202,140 @@ public class ModbusTransport {
     }
 
     /**
+     * Reads multiple consecutive 16-bit holding registers in a single Modbus RTU frame.
+     *
+     * <p>
+     * Sends a single Modbus "Read Holding Registers" request (function code 0x03) for {@code count}
+     * consecutive registers starting at {@code startReg}, and returns all values in one array.
+     * This is more efficient than calling {@link #readRegister} in a loop because it uses only
+     * one serial round-trip regardless of how many registers are requested.
+     * </p>
+     *
+     * <p>
+     * Frame format transmitted:
+     * </p>
+     *
+     * <pre>
+     * [slave][0x03][start_hi][start_lo][count_hi][count_lo][crc_lo][crc_hi]
+     * </pre>
+     *
+     * <p>
+     * Response received ({@code 3 + count * 2 + 2} bytes):
+     * </p>
+     *
+     * <pre>
+     * [slave][0x03][byte_count][val0_hi][val0_lo]...[valN_hi][valN_lo][crc_lo][crc_hi]
+     * </pre>
+     *
+     * <p>
+     * Example — read 19 registers starting at 0x0000:
+     * </p>
+     *
+     * <pre>
+     * int[] regs = readRegisters(slave, 0x0000, 19);
+     * double volts = regs[0] / 100.0;  // VSET at offset 0
+     * double amps  = regs[1] / 1000.0; // ISET at offset 1
+     * </pre>
+     *
+     * @param slave    Modbus slave address
+     * @param startReg starting register address (0x0000–0xFFFF)
+     * @param count    number of registers to read (1–32)
+     * @return array of {@code count} raw 16-bit register values in address order
+     * @throws Exception if a serial timeout occurs, the response is malformed, or CRC validation fails
+     */
+    public int[] readRegisters(final byte slave, final int startReg, final int count) throws Exception {
+        byte[] frame = new byte[8];
+        frame[0] = slave;
+        frame[1] = ModbusFunctionCodes.READ_HOLDING_REGISTERS;
+        frame[2] = (byte) (startReg >> 8);
+        frame[3] = (byte) startReg;
+        frame[4] = (byte) (count >> 8);
+        frame[5] = (byte) count;
+        int crc = ModbusCRC.calculate(frame, 6);
+        frame[6] = (byte) crc;
+        frame[7] = (byte) (crc >> 8);
+        log("TX", frame, null);
+        out.write(frame);
+        out.flush();
+        // Response: [slave][fc][byte_count][val_hi][val_lo]... × count [crc_lo][crc_hi]
+        byte[] resp = readBytes(3 + count * 2 + 2);
+        verifyCRC(resp);
+        log("RX", resp, null);
+        final int[] values = new int[count];
+        for (int i = 0; i < count; i++) {
+            values[i] = ((resp[3 + i * 2] & 0xFF) << 8) | (resp[4 + i * 2] & 0xFF);
+        }
+        return values;
+    }
+
+    /**
+     * Writes 16-bit values to multiple consecutive holding registers in a single Modbus RTU frame.
+     *
+     * <p>
+     * Sends a single Modbus "Write Multiple Registers" request (function code 0x10) for
+     * {@code values.length} consecutive registers starting at {@code startReg}.
+     * This is more efficient than calling {@link #writeRegister} in a loop when two or more
+     * adjacent registers must be updated atomically (e.g. VSET and ISET).
+     * </p>
+     *
+     * <p>
+     * Frame format transmitted ({@code 7 + values.length * 2 + 2} bytes):
+     * </p>
+     *
+     * <pre>
+     * [slave][0x10][start_hi][start_lo][qty_hi][qty_lo][byte_count][val0_hi][val0_lo]...[crc_lo][crc_hi]
+     * </pre>
+     *
+     * <p>
+     * The device acknowledges with a fixed 8-byte response echoing the start address and quantity:
+     * </p>
+     *
+     * <pre>
+     * [slave][0x10][start_hi][start_lo][qty_hi][qty_lo][crc_lo][crc_hi]
+     * </pre>
+     *
+     * <p>
+     * Example — write VSET and ISET atomically on a Sinilink (addresses 0x0000–0x0001):
+     * </p>
+     *
+     * <pre>
+     * writeRegisters(slave, 0x0000, new int[] { 500, 2500 }); // 5.00 V, 2.500 A
+     * </pre>
+     *
+     * @param slave    Modbus slave address
+     * @param startReg starting register address (0x0000–0xFFFF)
+     * @param values   raw 16-bit values to write, one per register in address order (1–32 elements)
+     * @throws Exception if the device does not respond, the response is invalid, or CRC verification fails
+     */
+    public void writeRegisters(final byte slave, final int startReg, final int[] values) throws Exception {
+        final int qty = values.length;
+        final int byteCount = qty * 2;
+        // Frame: [slave][0x10][start_hi][start_lo][qty_hi][qty_lo][byte_count][data×byteCount][crc_lo][crc_hi]
+        byte[] frame = new byte[7 + byteCount + 2];
+        frame[0] = slave;
+        frame[1] = ModbusFunctionCodes.WRITE_MULTIPLE_REGISTERS;
+        frame[2] = (byte) (startReg >> 8);
+        frame[3] = (byte) startReg;
+        frame[4] = (byte) (qty >> 8);
+        frame[5] = (byte) qty;
+        frame[6] = (byte) byteCount;
+        for (int i = 0; i < qty; i++) {
+            frame[7 + i * 2]     = (byte) (values[i] >> 8);
+            frame[7 + i * 2 + 1] = (byte) values[i];
+        }
+        int crc = ModbusCRC.calculate(frame, frame.length - 2);
+        frame[frame.length - 2] = (byte) crc;
+        frame[frame.length - 1] = (byte) (crc >> 8);
+        log("TX", frame, null);
+        out.write(frame);
+        out.flush();
+        // Response: [slave][0x10][start_hi][start_lo][qty_hi][qty_lo][crc_lo][crc_hi]
+        byte[] resp = readBytes(8);
+        verifyCRC(resp);
+        log("RX", resp, null);
+    }
+
+    /**
      * Writes a 16-bit value to a holding register using Modbus RTU.
      *
      * <p>
@@ -325,18 +459,18 @@ public class ModbusTransport {
     /**
      * Derives a short human-readable annotation from a raw Modbus RTU frame.
      *
-     * <p>
-     * For TX frames (direction {@code "TX"}) with at least 6 bytes:
-     * </p>
+     * <p>Handles all three function codes used by the devices in this project:</p>
      * <ul>
-     * <li>fc=0x03 (read holding registers): reports the register address.</li>
-     * <li>fc=0x06 (write single register): reports the register address and raw value written.</li>
+     * <li>TX fc=0x03: single-register read → {@code "Read <name>"}; multi-register read →
+     *     {@code "Read 0x0000–0x0012 (19 regs)"}.</li>
+     * <li>TX fc=0x06: single-register write → {@code "Write <name> = <value>"}.</li>
+     * <li>TX fc=0x10: multi-register write → {@code "Write 0x0000–0x0001 (2 regs)"}.</li>
+     * <li>RX fc=0x03 (7 bytes, single-register response): {@code "Value = <n> (0x…)"}.</li>
+     * <li>RX fc=0x03 (>7 bytes, multi-register response): {@code "Read 19 regs, 38 data bytes"}.</li>
+     * <li>RX fc=0x06: echoed register address and value.</li>
+     * <li>RX fc=0x10: echoed start address and quantity.</li>
      * </ul>
-     * <p>
-     * For RX frames with fc=0x03 (read response, 7 bytes): reports the number of data bytes returned.
-     * For RX frames with fc=0x06 (write echo, 8 bytes): reports the echoed register address and value.
-     * Returns {@code null} for unrecognised frames or frames that are too short to decode.
-     * </p>
+     * <p>Returns {@code null} for unrecognised frames or frames that are too short to decode.</p>
      *
      * @param dir  direction label ({@code "TX"} or {@code "RX"})
      * @param data raw frame bytes
@@ -349,28 +483,50 @@ public class ModbusTransport {
         final byte fc = data[1];
         if ("TX".equals(dir)) {
             if (data.length >= 6) {
-                int reg = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
-                String regName = DeviceRegister.REGISTRY.getOrDefault(reg, String.format("0x%04X", reg));
+                final int start = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
                 if (fc == ModbusFunctionCodes.READ_HOLDING_REGISTERS) {
-                    return "Read " + regName;
+                    final int count = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
+                    if (count == 1) {
+                        final String regName = DeviceRegister.REGISTRY.getOrDefault(start, String.format("0x%04X", start));
+                        return "Read " + regName;
+                    }
+                    return String.format("Read 0x%04X–0x%04X (%d regs)", start, start + count - 1, count);
                 }
                 if (fc == ModbusFunctionCodes.WRITE_SINGLE_REGISTER) {
-                    int val = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
+                    final String regName = DeviceRegister.REGISTRY.getOrDefault(start, String.format("0x%04X", start));
+                    final int val = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
                     return String.format("Write %s = %d", regName, val);
+                }
+                if (fc == ModbusFunctionCodes.WRITE_MULTIPLE_REGISTERS && data.length >= 7) {
+                    final int qty = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
+                    return String.format("Write 0x%04X–0x%04X (%d regs)", start, start + qty - 1, qty);
                 }
             }
         } else {
-            // RX: fc=0x03 read response - [slave][0x03][byteCount][val_hi][val_lo][crc×2]
-            if (fc == ModbusFunctionCodes.READ_HOLDING_REGISTERS && data.length == 7) {
-                int val = ((data[3] & 0xFF) << 8) | (data[4] & 0xFF);
-                return String.format("Value = %d (0x%04X)", val, val);
+            if (fc == ModbusFunctionCodes.READ_HOLDING_REGISTERS) {
+                if (data.length == 7) {
+                    // Single-register response: [slave][0x03][0x02][val_hi][val_lo][crc×2]
+                    final int val = ((data[3] & 0xFF) << 8) | (data[4] & 0xFF);
+                    return String.format("Value = %d (0x%04X)", val, val);
+                }
+                if (data.length > 7) {
+                    // Multi-register response: [slave][0x03][byte_count][data...][crc×2]
+                    final int byteCount = data[2] & 0xFF;
+                    return String.format("Read %d regs, %d data bytes", byteCount / 2, byteCount);
+                }
             }
-            // RX: fc=0x06 write echo - same layout as TX
+            // RX: fc=0x06 write echo — [slave][0x06][reg_hi][reg_lo][val_hi][val_lo][crc×2]
             if (fc == ModbusFunctionCodes.WRITE_SINGLE_REGISTER && data.length >= 6) {
-                int reg = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
-                String regName = DeviceRegister.REGISTRY.getOrDefault(reg, String.format("0x%04X", reg));
-                int val = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
+                final int reg = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
+                final String regName = DeviceRegister.REGISTRY.getOrDefault(reg, String.format("0x%04X", reg));
+                final int val = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
                 return String.format("Write %s = %d", regName, val);
+            }
+            // RX: fc=0x10 ack — [slave][0x10][start_hi][start_lo][qty_hi][qty_lo][crc×2]
+            if (fc == ModbusFunctionCodes.WRITE_MULTIPLE_REGISTERS && data.length == 8) {
+                final int start = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
+                final int qty   = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
+                return String.format("Wrote 0x%04X–0x%04X (%d regs)", start, start + qty - 1, qty);
             }
         }
         return null;

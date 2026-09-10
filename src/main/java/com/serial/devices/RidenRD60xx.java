@@ -83,6 +83,31 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
     public static final DeviceRegister IRANGE = new DeviceRegister("Current Range", "A",
             RidenRegistersRD60xx.REG_CURRENT_RANGE);
 
+    // -------------------------------------------------------------------------
+    // Poll cache — populated by pollAll(), returned by all getters
+    // Block: 0x0000–0x0012 (19 registers), see bulk-read-plan.md offset map
+    // -------------------------------------------------------------------------
+
+    private volatile int    cacheDeviceId;          // offset  0 DEVICE_ID        raw
+    private volatile int    cacheSerialHigh;         // offset  1 SERIAL_HIGH      raw
+    private volatile int    cacheSerialLow;          // offset  2 SERIAL_LOW       raw
+    private volatile int    cacheFirmwareRaw;        // offset  3 FIRMWARE         raw (FIRMWARE_VERSION.decode())
+    private volatile int    cacheTempSignCelsius;    // offset  4 TEMP_SIGN_C      raw
+    private volatile double cacheTemperature;        // offset  5 TEMP_CELSIUS     TEMP_CELSIUS.decode()
+    private volatile int    cacheTempSignFahrenheit; // offset  6 TEMP_SIGN_F      raw
+    private volatile int    cacheTemperatureFahr;    // offset  7 TEMP_FAHRENHEIT  raw
+    private volatile double cacheVoltageSet;         // offset  8 VSET             VSET.decode()
+    private volatile double cacheCurrentSet;         // offset  9 ISET             ISET.decode()
+    private volatile double cacheVoltageOut;         // offset 10 VOUT             VOUT.decode()
+    private volatile double cacheCurrentOut;         // offset 11 IOUT             IOUT.decode()
+    private volatile int    cacheAh;                 // offset 12 AH               raw
+    private volatile double cachePowerOut;           // offset 13 POUT             POUT.decode()
+    private volatile double cacheVoltageIn;          // offset 14 VIN              VIN.decode()
+    private volatile int    cacheLock;               // offset 15 LOCK             raw
+    private volatile int    cacheProtection;         // offset 16 PROTECTION       raw
+    private volatile int    cacheMode;               // offset 17 MODE             raw
+    private volatile int    cacheOutput;             // offset 18 OUTPUT           raw
+
     /**
      * Lookup map from the raw 5-digit model ID returned by Register 0x0000 to the retail model name.
      *
@@ -221,6 +246,57 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
         return this;
     }
 
+    /**
+     * Reads the full register block ({@code 0x0000–0x0012}, 19 registers) in a single Modbus
+     * {@code 0x03} frame and populates all poll-cache fields.
+     *
+     * <p>Offset map (address − {@link RidenRegistersRD60xx#REG_DEVICE_ID}):</p>
+     * <pre>
+     *  [0]  DEVICE_ID  [1]  SERIAL_HIGH  [2]  SERIAL_LOW   [3]  FIRMWARE
+     *  [4]  TEMP_SIGN_C [5] TEMP_C       [6]  TEMP_SIGN_F  [7]  TEMP_F
+     *  [8]  VSET        [9] ISET         [10] VOUT          [11] IOUT
+     * [12]  AH         [13] POUT         [14] VIN           [15] LOCK
+     * [16]  PROTECTION [17] MODE         [18] OUTPUT
+     * </pre>
+     *
+     * <p>Scaling is delegated to {@link DeviceRegister#decode(int)} on each constant.</p>
+     *
+     * @throws Exception if the Modbus read fails
+     */
+    @Override
+    public void pollAll() throws Exception {
+        final int[] r = readBlock(RidenRegistersRD60xx.REG_DEVICE_ID, 19);
+        cacheDeviceId          = r[0];
+        cacheSerialHigh        = r[1];
+        cacheSerialLow         = r[2];
+        cacheFirmwareRaw       = r[3];
+        cacheTempSignCelsius   = r[4];
+        cacheTemperature       = TEMP_CELSIUS.decode(r[5]);
+        cacheTempSignFahrenheit = r[6];
+        cacheTemperatureFahr   = r[7];
+        cacheVoltageSet        = VSET.decode(r[8]);
+        cacheCurrentSet        = ISET.decode(r[9]);
+        cacheVoltageOut        = VOUT.decode(r[10]);
+        cacheCurrentOut        = IOUT.decode(r[11]);
+        cacheAh                = r[12];
+        cachePowerOut          = POUT.decode(r[13]);
+        cacheVoltageIn         = VIN.decode(r[14]);
+        cacheLock              = r[15];
+        cacheProtection        = r[16];
+        cacheMode              = r[17];
+        cacheOutput            = r[18];
+    }
+
+    @Override
+    public double getVoltageSet() throws Exception {
+        return cacheVoltageSet;
+    }
+
+    @Override
+    public double getCurrentSet() throws Exception {
+        return cacheCurrentSet;
+    }
+
     @Override
     public void setVoltageVerified(final double volts) throws Exception {
         writeVerified(VSET, VOUT, volts);
@@ -233,7 +309,7 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
 
     @Override
     public double getVoltage() throws Exception {
-        return read(VOUT);
+        return cacheVoltageOut;
     }
 
     @Override
@@ -248,42 +324,42 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
 
     @Override
     public double getCurrent() throws Exception {
-        return read(IOUT);
+        return cacheCurrentOut;
     }
 
     @Override
     public double getPower() throws Exception {
-        return read(POUT);
+        return cachePowerOut;
     }
 
     @Override
     public double getInputVoltage() throws Exception {
-        return read(VIN);
+        return cacheVoltageIn;
     }
 
     @Override
-    public void setOutput(boolean on) throws Exception {
+    public void setOutput(final boolean on) throws Exception {
         writeInt(OUTPUT_ENABLE, (on ? ModbusConstants.STATE_ON : ModbusConstants.STATE_OFF));
     }
 
     @Override
     public boolean getOutput() throws Exception {
-        return (readInt(OUTPUT_ENABLE) == ModbusConstants.STATE_ON);
+        return (cacheOutput == ModbusConstants.STATE_ON);
     }
 
     @Override
     public int getFirmwareVersion() throws Exception {
-        return readInt(FIRMWARE_VERSION);
+        return (int) FIRMWARE_VERSION.decode(cacheFirmwareRaw);
     }
 
     @Override
-    public void setProtectionState(boolean on) throws Exception {
+    public void setProtectionState(final boolean on) throws Exception {
         writeInt(PROTECTION_STATE, (on ? ModbusConstants.STATE_ON : ModbusConstants.STATE_OFF));
     }
 
     @Override
     public boolean getProtectionState() throws Exception {
-        return (readInt(PROTECTION_STATE) == ModbusConstants.STATE_ON);
+        return (cacheProtection == ModbusConstants.STATE_ON);
     }
 
     @Override
@@ -293,11 +369,11 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
 
     @Override
     public boolean getKeypad() throws Exception {
-        return (readInt(LOCK) == ModbusConstants.STATE_ON);
+        return (cacheLock == ModbusConstants.STATE_ON);
     }
 
     /**
-     * Returns the regulation mode.
+     * Returns the regulation mode from the poll cache.
      *
      * <p>Register {@link RidenRegistersRD60xx#REG_MODE}: 0 = CV, 1 = CC.</p>
      *
@@ -306,32 +382,32 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
      */
     @Override
     public boolean isCvMode() throws Exception {
-        return (readInt(MODE) == 0);
+        return (cacheMode == 0);
     }
 
     @Override
     public double getTemperatureCelsius() throws Exception {
-        return read(TEMP_CELSIUS);
+        return cacheTemperature;
     }
 
     public int getDeviceId() throws Exception {
-        return readInt(DEVICE_ID);
+        return cacheDeviceId;
     }
 
     public int getTemperatureSignCelsius() throws Exception {
-        return readInt(TEMP_SIGN_CELSIUS);
+        return cacheTempSignCelsius;
     }
 
     public int getTemperatureSignFahrenheit() throws Exception {
-        return readInt(TEMP_SIGN_FAHRENHEIT);
+        return cacheTempSignFahrenheit;
     }
 
     public int getTemperatureFahrenheit() throws Exception {
-        return readInt(TEMP_FAHRENHEIT);
+        return cacheTemperatureFahr;
     }
 
     public double getAmpereHours() throws Exception {
-        return read(AH);
+        return AH.decode(cacheAh);
     }
 
     public void setPreset(final int preset) throws Exception {
