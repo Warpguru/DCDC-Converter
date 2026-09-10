@@ -12,7 +12,13 @@ import io.javalin.openapi.plugin.OpenApiPlugin;
 import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
 
 import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.core.config.Configurator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.Filter;
+import org.apache.logging.log4j.core.Filter.Result;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.core.config.LoggerConfig;
+import org.apache.logging.log4j.core.filter.ThresholdFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,17 +74,17 @@ public class SerialController {
 
     private void process(final String[] args) throws Exception {
         if (args.length == 0 || args.length > 2) {
-            System.out.println("Usage:");
-            System.out.println("  java -jar SerialController.jar <port> [config-file]");
-            System.out.println("Where:");
-            System.out.println("  <port>        Serial port name, e.g. COM3 or /dev/ttyUSB0");
-            System.out.println("  [config-file] Optional: fully-qualified path to a properties file.");
-            System.out.println("                Overrides credentials.properties defaults and may specify:");
-            System.out.println("                  serialcontroller.host           Hostname/IP the server binds to");
-            System.out.println("                  serialcontroller.port           TCP port the server listens on");
-            System.out.println("                  serialcontroller.log.level      Log level (TRACE/DEBUG/INFO/WARN/ERROR)");
-            System.out.println("                  serialcontroller.admin.username Username for GUI administration");
-            System.out.println("                  serialcontroller.admin.password Password for GUI administration");
+            logger.info("Usage:");
+            logger.info("  java -jar SerialController.jar <port> [config-file]");
+            logger.info("Where:");
+            logger.info("  <port>        Serial port name, e.g. COM3 or /dev/ttyUSB0");
+            logger.info("  [config-file] Optional: fully-qualified path to a properties file.");
+            logger.info("                Overrides credentials.properties defaults and may specify:");
+            logger.info("                  serialcontroller.host           Hostname/IP the server binds to");
+            logger.info("                  serialcontroller.port           TCP port the server listens on");
+            logger.info("                  serialcontroller.log.level      Log level (TRACE/DEBUG/INFO/WARN/ERROR)");
+            logger.info("                  serialcontroller.admin.username Username for GUI administration");
+            logger.info("                  serialcontroller.admin.password Password for GUI administration");
             return;
         }
         logger.info("Serial Controller started.");
@@ -97,7 +103,7 @@ public class SerialController {
         SerialPort[] serialPorts = SerialPort.getCommPorts();
         if (serialPorts.length == 0) {
             String msg = "No serial ports found on this system.";
-            System.out.println(msg);
+            logger.info(msg);
             logger.warn(msg);
         } else {
             logger.info("Found {} serial port(s):", serialPorts.length);
@@ -197,7 +203,35 @@ public class SerialController {
             logger.warn("Unrecognised log level '{}' in configuration — keeping log4j2.xml level.", levelStr);
             return;
         }
-        Configurator.setLevel("com.serial", level);
+
+        final LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
+        final Configuration cfg = ctx.getConfiguration();
+
+        // Step 1: set the level on the com.serial LoggerConfig declared in log4j2.xml.
+        // Child loggers (e.g. com.serial.modbus.ModbusTransport) inherit from this config,
+        // so isTraceEnabled()/isDebugEnabled() on all com.serial.* loggers update after
+        // ctx.updateLoggers() is called below.
+        final LoggerConfig serialLoggerCfg = cfg.getLoggerConfig("com.serial");
+        serialLoggerCfg.setLevel(level);
+
+        // Step 2: replace the ThresholdFilter on the ConsoleAppender ref of com.serial so
+        // DEBUG/TRACE messages actually reach the console (XML default is INFO).
+        final Filter serialConsoleFilter = ThresholdFilter.createFilter(level, Result.ACCEPT, Result.DENY);
+        serialLoggerCfg.removeAppender("ConsoleAppender");
+        serialLoggerCfg.addAppender(cfg.getAppender("ConsoleAppender"), level, serialConsoleFilter);
+
+        // Step 3: when DEBUG or TRACE is requested, also lower the io.javalin console threshold
+        // (defaults to WARN) so Javalin startup and lifecycle messages become visible too.
+        final Level javalinConsoleLevel = level.isMoreSpecificThan(Level.DEBUG) ? Level.WARN : level;
+        final Filter javalinConsoleFilter = ThresholdFilter.createFilter(javalinConsoleLevel, Result.ACCEPT, Result.DENY);
+        final LoggerConfig javalinLoggerCfg = cfg.getLoggerConfig("io.javalin");
+        javalinLoggerCfg.removeAppender("ConsoleAppender");
+        javalinLoggerCfg.addAppender(cfg.getAppender("ConsoleAppender"), javalinConsoleLevel, javalinConsoleFilter);
+
+        // Commit all changes — propagates the updated level to all live Logger instances
+        // that inherit from the modified LoggerConfigs.
+        ctx.updateLoggers();
+
         logger.info("Log level for com.serial set to {} (from configuration).", level);
     }
 
@@ -220,14 +254,13 @@ public class SerialController {
         int    pid          = port.getProductID();
         String usbId        = (vid != 0 || pid != 0) ? String.format("0x%04X:0x%04X", vid, pid) : "N/A";
 
-        System.out.println("  -----------------------------------------");
-        System.out.printf("  Port:         %s%n", name);
-        System.out.printf("  Description:  %s%n", description);
-        System.out.printf("  Location:     %s%n", location);
-        System.out.printf("  Manufacturer: %s%n", manufacturer);
-        System.out.printf("  Serial No:    %s%n", serialNumber);
-        System.out.printf("  USB VID:PID:  %s%n", usbId);
-
+        logger.info("  -----------------------------------------");
+        logger.info("  Port:         {}", name);
+        logger.info("  Description:  {}", description);
+        logger.info("  Location:     {}", location);
+        logger.info("  Manufacturer: {}", manufacturer);
+        logger.info("  Serial No:    {}", serialNumber);
+        logger.info("  USB VID:PID:  {}", usbId);
         logger.info("Port: {} | Description: {} | Location: {} | Manufacturer: {} | Serial: {} | VID:PID: {}",
                 name, description, location, manufacturer, serialNumber, usbId);
     }

@@ -179,7 +179,7 @@ public abstract class ModbusDevice {
     public double read(final DeviceRegister reg) throws Exception {
         int raw = read(reg.address);
         double value = reg.decode(raw);
-        logger.debug("    -> {}: {} {}", reg.name, formatValue(value, reg.scale), reg.unit);
+        logger.trace("    -> {}: {} {}", reg.name, formatValue(value, reg.scale), reg.unit);
         return value;
     }
 
@@ -220,7 +220,7 @@ public abstract class ModbusDevice {
      * @throws Exception if communication with the device fails
      */
     public void write(final DeviceRegister reg, final double value) throws Exception {
-        logger.debug("    -> {}: {} {} (write)", reg.name, formatValue(value, reg.scale), reg.unit);
+        logger.trace("    -> {}: {} {} (write)", reg.name, formatValue(value, reg.scale), reg.unit);
         write(reg.address, reg.encode(value));
     }
 
