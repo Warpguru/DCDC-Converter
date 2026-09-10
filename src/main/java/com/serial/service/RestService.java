@@ -196,7 +196,7 @@ public class RestService {
     )
     // @formatter:on
     public void getState(final Context ctx) {
-        logger.info("REST GET /api/state");
+        logger.debug("REST GET /api/state");
         ctx.json(deviceService.getState());
     }
 
@@ -225,7 +225,7 @@ public class RestService {
     )
     // @formatter:on
     public void getLimits(final Context ctx) {
-        logger.info("REST GET /api/limits");
+        logger.debug("REST GET /api/limits");
         ConverterState s = deviceService.getState();
         ctx.json(new LimitsResponse(s.getManufacturer(), s.getDeviceName(), s.getMinVoltage(), s.getMaxVoltage(),
                 s.getMinCurrent(), s.getMaxCurrent(), s.getMaxPower()));
@@ -265,7 +265,7 @@ public class RestService {
             return;
         }
         VoltageRequest req = ctx.bodyAsClass(VoltageRequest.class);
-        logger.info("REST PUT /api/voltage: {}", compactBody(ctx.body()));
+        logger.debug("REST PUT /api/voltage: {}", compactBody(ctx.body()));
         try {
             deviceService.setVoltage(req.voltage);
             ctx.status(HttpStatus.NO_CONTENT);
@@ -310,7 +310,7 @@ public class RestService {
             return;
         }
         CurrentRequest req = ctx.bodyAsClass(CurrentRequest.class);
-        logger.info("REST PUT /api/current: {}", compactBody(ctx.body()));
+        logger.debug("REST PUT /api/current: {}", compactBody(ctx.body()));
         try {
             deviceService.setCurrent(req.current);
             ctx.status(HttpStatus.NO_CONTENT);
@@ -354,7 +354,7 @@ public class RestService {
             return;
         }
         OutputRequest req = ctx.bodyAsClass(OutputRequest.class);
-        logger.info("REST PUT /api/output: {}", compactBody(ctx.body()));
+        logger.debug("REST PUT /api/output: {}", compactBody(ctx.body()));
         try {
             deviceService.setOutput(req.outputEnable);
             ctx.status(HttpStatus.NO_CONTENT);
@@ -396,7 +396,7 @@ public class RestService {
             return;
         }
         KeypadRequest req = ctx.bodyAsClass(KeypadRequest.class);
-        logger.info("REST PUT /api/keypad: {}", compactBody(ctx.body()));
+        logger.debug("REST PUT /api/keypad: {}", compactBody(ctx.body()));
         try {
             deviceService.setKeypad(req.keypadLock);
             ctx.status(HttpStatus.NO_CONTENT);
@@ -428,7 +428,7 @@ public class RestService {
             ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("No device connected");
             return;
         }
-        logger.info("REST POST /api/protection/clear");
+        logger.debug("REST POST /api/protection/clear");
         try {
             deviceService.clearProtection();
             ctx.status(HttpStatus.NO_CONTENT);
@@ -465,7 +465,7 @@ public class RestService {
     )
     // @formatter:on
     public void exit(final Context ctx) {
-        logger.info("REST POST /api/exit");
+        logger.debug("REST POST /api/exit");
         final String expectedUsername = appConfig.getAdminUsername();
         final String expectedPassword = appConfig.getAdminPassword();
         if (expectedUsername == null || expectedPassword == null) {
