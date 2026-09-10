@@ -154,7 +154,7 @@ public class ConverterState {
     private volatile ConverterTopology converterTopology = ConverterTopology.BUCK_BOOST;
 
     /**
-     * Device model name, e.g. {@code "XY6008"}, {@code "RD5020"}.
+     * Device model name, e.g. {@code "XY6008"}, {@code "DPS5020"}.
      *
      * <p>
      * Matches the file name of the corresponding {@code .properties} file under
@@ -164,9 +164,19 @@ public class ConverterState {
     private volatile String deviceName = "Unknown";
 
     /**
-     * Device manufacturer name, e.g. {@code "Sinilink"}, {@code "Riden"}.
+     * Device manufacturer name, e.g. {@code "Sinilink"}, {@code "Ruideng"}.
      */
     private volatile String manufacturer = "Unknown";
+
+    /**
+     * Firmware version string, e.g. {@code "v1.7"}.
+     *
+     * <p>
+     * Set once after device detection. An empty string means the firmware version could not be
+     * read (e.g. DPS5020 batches that always return 0 from the firmware register).
+     * </p>
+     */
+    private volatile String firmwareVersion = "";
 
     /**
      * Maximum output voltage in volts (V), from the device datasheet.
@@ -457,6 +467,24 @@ public class ConverterState {
      */
     void setManufacturer(final String manufacturer) {
         this.manufacturer = manufacturer;
+    }
+
+    /**
+     * Returns the firmware version string.
+     *
+     * @return firmware version, e.g. {@code "v1.7"}; empty string if unknown
+     */
+    public String getFirmwareVersion() {
+        return firmwareVersion;
+    }
+
+    /**
+     * Sets the firmware version string. Package-private - only {@link DeviceService} may call this.
+     *
+     * @param firmwareVersion firmware version string, e.g. {@code "v1.7"}
+     */
+    void setFirmwareVersion(final String firmwareVersion) {
+        this.firmwareVersion = firmwareVersion;
     }
 
     /**

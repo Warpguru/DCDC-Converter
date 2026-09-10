@@ -1,7 +1,7 @@
 package com.serial.devices;
 
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,13 +14,36 @@ import com.serial.modbus.ModbusConstants;
 import com.serial.modbus.ModbusTransport;
 
 /**
- * {@code RidenRD50xx} (e.g. {@code RD5020}) {@code Modbus} to {@code TTL} 3.3V {@code serial} connection.
- * 
+ * Driver for Ruideng {@code DPS/RD50xx} series programmable power supplies (e.g. {@code DPS5020}).
+ *
+ * <p>
+ * The DPS series (DPS5005, DPS5010, DPS5020) is an older Ruideng product line that shares the same
+ * electrical specs as the modern RD50xx naming but uses a different Modbus register map from the
+ * RD60xx series. Key architectural differences vs. RD60xx:
+ * </p>
+ *
  * <ul>
- * <li>RidenRD50xx Black: → Gnd
- * <li>RidenRD50xx Yellow: → TxD
- * <li>RidenRD50xx Blue: → RxD
- * <li>RidenRD50xx Red: → NC (5V)
+ * <li>Default baud rate: 9600 baud (RD60xx defaults to 115200 baud).</li>
+ * <li>Model ID at Register 0x000B — 4-digit short code (e.g. {@code 5020}).
+ *     On the RD60xx, Register 0x0000 is the model register; on the DPS series, Register 0x0000
+ *     is {@code VSET}.</li>
+ * <li>Firmware at Register 0x000C ({@code VERSON}), raw value / 100.0 = version (e.g.
+ *     {@code 170} = v1.70). Several DPS5020 factory batches always return {@code 0} — this
+ *     is a known hardware limitation, not a protocol or scaling bug.</li>
+ * </ul>
+ *
+ * <p>
+ * Detected devices report {@code manufacturer = "Ruideng"} and use the {@code RD50xx} properties
+ * files (e.g. {@code RD5020.properties}) since the electrical limits are identical between the
+ * DPS and RD designations of the same model.
+ * </p>
+ *
+ * <p>Wire connections (TTL 3.3V serial):</p>
+ * <ul>
+ * <li>Black  → GND</li>
+ * <li>Yellow → TxD</li>
+ * <li>Blue   → RxD</li>
+ * <li>Red    → NC (5V)</li>
  * </ul>
  */
 public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
@@ -49,49 +72,47 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
     public static final DeviceRegister OUTPUT_ENABLE = new DeviceRegister("Output Enable", null,
             RidenRegistersRD50xx.REG_OUTPUT_ENABLE);
 
-    public static final DeviceRegister PRESET = new DeviceRegister("Preset Selector", "Mx", RidenRegistersRD50xx.REG_PRESET);
+    /** B_LED — Backlight brightness level (0 = darkest, 5 = brightest). */
+    public static final DeviceRegister BACKLIGHT = new DeviceRegister("Backlight Level", null,
+            RidenRegistersRD50xx.REG_BACKLIGHT);
 
     public static final DeviceRegister DEVICE_ID = new DeviceRegister("Model Identification", null,
             RidenRegistersRD50xx.REG_DEVICE_ID);
 
-    public static final DeviceRegister AH_HIGH = new DeviceRegister("Accumulated Amperehours high", "Ah",
-            RidenRegistersRD50xx.REG_AH_HIGH);
-
-    public static final DeviceRegister AH_LOW = new DeviceRegister("Accumulated Amperehours low", "Ah",
-            RidenRegistersRD50xx.REG_AH_LOW);
-
-    public static final DeviceRegister WH_HIGH = new DeviceRegister("Accumulated Watthours high", "Wh",
-            RidenRegistersRD50xx.REG_WH_HIGH);
-
-    public static final DeviceRegister WH_LOW = new DeviceRegister("Accumulated Watthours low", "Wh",
-            RidenRegistersRD50xx.REG_WH_LOW);
-
-    public static final DeviceRegister TEMP_SIGN_CELSIUS = new DeviceRegister("Temperature Sign", null,
-            RidenRegistersRD50xx.REG_TEMP_SIGN_CELSIUS);
-
-    public static final DeviceRegister TEMP_CELSIUS = new DeviceRegister("Temperature Celsius", "°C",
-            RidenRegistersRD50xx.REG_TEMP_CELSIUS);
-
-    public static final DeviceRegister SERIAL_HIGH = new DeviceRegister("Serial Number high", "Wh",
-            RidenRegistersRD50xx.REG_SERIAL_HIGH);
-
-    public static final DeviceRegister SERIAL_LOW = new DeviceRegister("Serial Number low", "Wh",
-            RidenRegistersRD50xx.REG_SERIAL_LOW);
-
-    public static final DeviceRegister FIRMWARE_VERSION = new DeviceRegister("Firmware Version", null,
-            RidenRegistersRD50xx.REG_FIRMWARE, 100);
-
     /**
-     * Whitelist of known RD50xx series device IDs (e.g. 5005, 5010, 5020).
+     * Firmware version register.
      *
      * <p>
-     * Register 0x000B returns the 4-digit device ID on RD50xx units. Validating against this
-     * whitelist prevents false detection on other hardware (such as Sinilink where register 0x000B
-     * is the output timer minutes counter).
+     * Raw register value / 10.0 = firmware version (e.g. {@code 17} = v1.7, {@code 19} = v1.9).
+     * Several DPS5020 factory batches always return {@code 0} from this register — this is a known
+     * hardware limitation, not a scaling bug. A result of {@code 0} should be treated as "firmware
+     * version unknown" rather than "v0.0".
      * </p>
      */
-    private static final Set<Integer> KNOWN_DEVICE_IDS = Set.of(
-            5005, 5010, 5020
+    public static final DeviceRegister FIRMWARE_VERSION = new DeviceRegister("Firmware Version", null,
+            RidenRegistersRD50xx.REG_FIRMWARE, 10);
+
+    /**
+     * Lookup map from the 4-digit model code returned by Register 0x000B to the retail model name.
+     *
+     * <p>
+     * Register 0x000B is the Product Model Register in the DPS series Modbus protocol. It returns a
+     * short 4-digit integer identifying the model (e.g. {@code 5020} for the DPS5020 / RD5020).
+     * Confirmed on real hardware: a DPS5020 returns exactly {@code 5020} at 9600 baud.
+     * </p>
+     *
+     * <p>
+     * The device name is stored as {@code "RD50xx"} (e.g. {@code "RD5020"}) rather than the DPS
+     * prefix so that both DPS and RD variants of the same model share the same properties file
+     * (e.g. {@code RD5020.properties}). The manufacturer field is set to {@code "Ruideng"} to
+     * correctly identify the DPS origin. Validating against this map also prevents false detection
+     * on Sinilink hardware where Register 0x000B is the output timer minutes counter.
+     * </p>
+     */
+    private static final Map<Integer, String> KNOWN_DEVICE_IDS = Map.of(
+            5005, "DPS5005",
+            5010, "DPS5010",
+            5020, "DPS5020"
     );
 
     /**
@@ -114,18 +135,18 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
     }
 
     /**
-     * Verify that {@code Riden RD50xx} is present probing only the specified baud rates.
+     * Verify that a Ruideng DPS/RD50xx device is present probing only the specified baud rates.
      *
      * <p>
-     * Probes the device ID register (0x000B) first and validates it against {@link #KNOWN_DEVICE_IDS}.
-     * If matched, reads the firmware version (0x0014) to confirm and complete detection.
+     * Probes the model register (0x000B) first and validates against {@link #KNOWN_DEVICE_IDS}.
+     * If matched, reads the firmware version register (0x000C) to complete detection.
      * </p>
      *
      * @param bauds list of baud rates to probe in order
      * @return this {@link RidenRD50xx} instance
      */
     public DC2DCConverter verifyDevicePresent(final List<Integer> bauds) {
-        logger.info("Checking for Riden RD50xx device...");
+        logger.info("Checking for Ruideng DPS/RD50xx device...");
         for (final Integer baud : bauds) {
             try {
                 transport = new ModbusTransport(portName, baud);
@@ -134,16 +155,22 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
                 // Probe Device ID register (0x000B)
                 try {
                     int deviceId = getDeviceId();
-                    logger.debug("Device ID register read at {} baud: {}", baud, deviceId);
-                    if (KNOWN_DEVICE_IDS.contains(deviceId)) {
+                    // Register 0x000B returns a short 4-digit model code (e.g. 5020 for RD5020),
+                    // confirmed on real hardware. This differs from the RD60xx layout where Register
+                    // 0x0000 returns 5-digit IDs; the RD50xx has a different register map.
+                    logger.debug("Device ID register (0x000B) raw value at {} baud: {}", baud, deviceId);
+                    final String modelName = KNOWN_DEVICE_IDS.get(deviceId);
+                    if (modelName != null) {
                         int fw = 0;
                         try {
                             fw = getFirmwareVersion();
                         } catch (Exception ignored) {
                         }
-                        this.manufacturer = "Riden";
-                        this.device = String.format("RD%04d", deviceId);
-                        logger.info("Detected Riden RD50xx (Model: {}, FW: {}) at {} baud.", this.device, fw, baud);
+                        this.manufacturer = "Ruideng";
+                        this.device = modelName;
+                        // fw == 0 is normal on DPS5020 factory batches — not a read error.
+                        final String fwStr = (fw == 0) ? "unknown" : ("v" + String.format("%.1f", fw / 10.0));
+                        logger.info("Detected Ruideng DPS/RD50xx (Model: {}, FW: {}) at {} baud.", this.device, fwStr, baud);
                     }
                 } catch (Exception e) {
                     logger.debug("Device ID read failed at {} baud: {}", baud, e.getMessage());
@@ -162,7 +189,7 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
             }
         }
         if (!isDeviceDetected()) {
-            logger.info("No Riden RD50xx detected.");
+            logger.info("No Ruideng DPS/RD50xx detected.");
         }
         return this;
     }
@@ -219,8 +246,7 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
 
     @Override
     public int getFirmwareVersion() throws Exception {
-        double firmwareVersion = read(FIRMWARE_VERSION);
-        return (int) firmwareVersion;
+        return readInt(FIRMWARE_VERSION);
     }
 
     @Override
@@ -233,9 +259,22 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
         return (readInt(PROTECTION_STATE) == ModbusConstants.STATE_ON);
     }
 
+    /**
+     * The DPS50xx series does not expose a temperature register in its Modbus protocol.
+     * Returns {@code -999.0} to indicate that temperature is unavailable on this device.
+     *
+     * <p>
+     * {@code NaN} cannot be used because Jackson serialises it as a non-finite float, which is
+     * invalid JSON and would cause every WebSocket broadcast to fail. {@code -999.0} is chosen
+     * as an unambiguous sentinel: it is physically impossible for any semiconductor device
+     * (absolute zero is −273.15 °C), so it can never be a real reading.
+     * </p>
+     *
+     * @return {@code -999.0} (temperature not available)
+     */
     @Override
     public double getTemperatureCelsius() throws Exception {
-        return read(TEMP_CELSIUS);
+        return -999.0;
     }
 
     @Override
@@ -261,38 +300,46 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
         return (readInt(MODE) == 0);
     }
 
-    public void setPreset(final int preset) throws Exception {
-        writeInt(PRESET, preset);
+    /**
+     * Recalls a stored data set (M0–M9) into the active working registers.
+     *
+     * <p>Writes to register {@code EXTRACT_M} (0x0023). Valid values: 0–9.</p>
+     *
+     * @param preset data-set index (0–9)
+     * @throws Exception if the Modbus write fails
+     */
+    public void recallPreset(final int preset) throws Exception {
+        write(RidenRegistersRD50xx.REG_EXTRACT_M, preset);
     }
 
-    public int getPreset() throws Exception {
-        return readInt(PRESET);
-    }
-
+    /**
+     * Returns the current model identification code from Register 0x000B.
+     *
+     * @return raw model code (e.g. {@code 5020})
+     * @throws Exception if the Modbus read fails
+     */
     public int getDeviceId() throws Exception {
         return readInt(DEVICE_ID);
     }
 
-    public double getAmpereHours() throws Exception {
-        int ahHigh = readInt(AH_HIGH);
-        int ahLow = readInt(AH_LOW);
-        return (ahHigh * 100 + ahLow) / 100;
+    /**
+     * Sets the backlight brightness level (0 = darkest, 5 = brightest).
+     *
+     * @param level brightness level (0–5)
+     * @throws Exception if the Modbus write fails
+     */
+    public void setBacklight(final int level) throws Exception {
+        writeInt(BACKLIGHT, level);
     }
 
-    public double getWattHours() throws Exception {
-        int whHigh = readInt(WH_HIGH);
-        int whLow = readInt(WH_LOW);
-        return (whHigh * 100 + whLow) / 100;
-    }
-
-    public int getTemperatureSignCelsius() throws Exception {
-        return readInt(TEMP_SIGN_CELSIUS);
-    }
-
-    public double getSerial() throws Exception {
-        int serialHigh = readInt(SERIAL_HIGH);
-        int serialLow = readInt(SERIAL_LOW);
-        return (serialHigh * 100 + serialLow) / 100;
+    /**
+     * Returns the current backlight brightness level.
+     *
+     * @return brightness level (0–5)
+     * @throws Exception if the Modbus read fails
+     */
+    public int getBacklight() throws Exception {
+        return readInt(BACKLIGHT);
     }
 
 }

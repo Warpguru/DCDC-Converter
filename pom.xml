@@ -16,7 +16,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
-        <main.class>com.serial.SerialControllerApp</main.class>
+        <main.class>com.serial.SerialController</main.class>
         <!-- Dependencies versions -->
         <jserialcomm.version>2.11.4</jserialcomm.version>
         <slf4j.version>2.0.17</slf4j.version>

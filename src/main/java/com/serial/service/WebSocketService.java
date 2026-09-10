@@ -21,7 +21,7 @@ import io.javalin.websocket.WsMessageContext;
  * <p>
  * This service owns the connected-client set, the broadcast thread, and all WebSocket message
  * handling. It replaces the inline WebSocket code that previously lived in
- * {@code SerialControllerApp}.
+ * {@code SerialController}.
  * </p>
  *
  * <p>
@@ -122,7 +122,7 @@ public class WebSocketService {
     }
 
     // -------------------------------------------------------------------------
-    // WebSocket event handlers - wired from SerialControllerApp
+    // WebSocket event handlers - wired from SerialController
     // -------------------------------------------------------------------------
 
     /**

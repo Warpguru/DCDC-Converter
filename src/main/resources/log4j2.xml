@@ -47,10 +47,14 @@
 
         <!--
           com.serial Logger: Single logger for all application code.
-          - Console: plain %msg%n, INFO and above - human-readable program output.
-          - File: full detail, ALL levels - complete diagnostic record (includes DEBUG Modbus annotations).
+          - Console: plain %msg%n, INFO and above only — human-readable program output.
+          - File: TRACE and above — complete diagnostic record.
+            Log levels used by the application:
+              INFO  — lifecycle events, detection results, setpoint changes.
+              DEBUG — raw Modbus TX/RX hex frames (one line per frame).
+              TRACE — decoded Modbus frame annotations (register name + value).
         -->
-        <Logger name="com.serial" level="ALL" additivity="false">
+        <Logger name="com.serial" level="TRACE" additivity="false">
             <AppenderRef ref="ConsoleAppender">
                 <LevelRangeFilter minLevel="FATAL" maxLevel="INFO" onMatch="ACCEPT" onMismatch="DENY" />
             </AppenderRef>

@@ -59,18 +59,39 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
             SinilinkRegisters.REG_KEYPAD_LOCK);
 
     /**
-     * Whitelist mapping known Sinilink model register raw values to their model names.
+     * Lookup map from the raw model ID returned by Register 0x0016 to the retail model name.
      *
      * <p>
-     * 22802 (0x5912) corresponds to XY6008. Validating against this whitelist avoids false positives
-     * when probing non-Sinilink hardware where register 0x0016 holds unrelated data.
+     * Per {@code doc/Sinilink.md}, Register 0x0016 returns a 16-bit integer whose value is the
+     * hex model code read as a decimal integer. For example, the XY6008 has hex model code
+     * {@code 0x6008}, which is decimal {@code 24584}. Validating against this map avoids false
+     * positives when probing non-Sinilink hardware where register 0x0016 holds unrelated data.
+     * </p>
+     *
+     * <ul>
+     * <li>{@code 0x5008} = 20488 → {@code "XY5008"}</li>
+     * <li>{@code 0x6008} = 24584 → {@code "XY6008"}</li>
+     * <li>{@code 0x6100} = 24832 → {@code "XY6020L"}</li>
+     * <li>{@code 0x3607} = 13831 → {@code "XY3607F"}</li>
+     * <li>{@code 0x1805} =  6149 → {@code "SK180S"}</li>
+     * <li>{@code 0x2209} =  8713 → {@code "SK220S"}</li>
+     * </ul>
+     *
+     * <p>
+     * <strong>Note:</strong> These are the exact hex IDs documented. Whether real hardware may
+     * return a variant with a revision digit (e.g. {@code 0x6009} for a later XY6008 revision)
+     * is unknown and must be confirmed by live-device observation (Sub-Task 3,
+     * {@code detection-gaps-plan.md}). The TODO log promotions in {@link #verifyDevicePresent(List)}
+     * are in place for that purpose.
      * </p>
      */
     private static final Map<Integer, String> KNOWN_MODELS = Map.of(
-            22802, "XY6008",
-            22804, "XY6014",
-            22805, "XY6020",
-            19208, "XY5008"
+            20488, "XY5008",   // 0x5008
+            24584, "XY6008",   // 0x6008
+            24832, "XY6020L",  // 0x6100
+            13831, "XY3607F",  // 0x3607
+             6149, "SK180S",   // 0x1805
+             8713, "SK220S"    // 0x2209
     );
 
     /**
@@ -113,7 +134,11 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
                 // Probe model register (0x0016) against whitelist
                 try {
                     int modelVersion = getModelVersion();
-                    logger.debug("Model version register read at {} baud: {}", baud, modelVersion);
+                    // INFO level intentional: raw ID must be visible without DEBUG mode for live-device
+                    // confirmation of whether 0x0016 returns exact hex IDs (e.g. 24584 for XY6008) or
+                    // includes a revision digit (see Sub-Task 3, detection-gaps-plan.md).
+                    // TODO: downgrade back to DEBUG once the value has been confirmed on real hardware.
+                    logger.info("Model register (0x0016) raw value at {} baud: {}", baud, modelVersion);
                     String modelName = KNOWN_MODELS.get(modelVersion);
                     if (modelName != null) {
                         this.manufacturer = "Sinilink";

@@ -1,11 +1,9 @@
 package com.serial.service;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.util.Properties;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.serial.AppConfiguration;
 
 import io.javalin.Javalin;
 import io.javalin.http.Context;
@@ -23,27 +21,29 @@ import io.javalin.security.BasicAuthCredentials;
  * REST API route definitions for the Serial Controller web interface.
  *
  * <p>
- * All endpoints are registered under the {@code /api} prefix. Each handler method carries an
- * {@code @OpenApi} annotation so the compile-time annotation processor emits a valid OpenAPI 3.x
- * specification, which the Swagger UI at {@code /openapi/ui} renders correctly.
+ * All endpoints are registered under the {@code /api} prefix. Each handler method carries an {@code @OpenApi} annotation so the
+ * compile-time annotation processor emits a valid OpenAPI 3.x specification, which the Swagger UI at {@code /openapi/ui}
+ * renders correctly.
  * </p>
  *
- * <p>Routes provided:</p>
+ * <p>
+ * Routes provided:
+ * </p>
  * <ul>
- * <li>{@code GET  /api/state}           - full converter state snapshot</li>
- * <li>{@code PUT  /api/voltage}          - set output voltage setpoint</li>
- * <li>{@code PUT  /api/current}          - set output current setpoint</li>
- * <li>{@code PUT  /api/output}           - enable or disable the output</li>
- * <li>{@code PUT  /api/keypad}           - lock or unlock the keypad (child lock)</li>
+ * <li>{@code GET  /api/state} - full converter state snapshot</li>
+ * <li>{@code PUT  /api/voltage} - set output voltage setpoint</li>
+ * <li>{@code PUT  /api/current} - set output current setpoint</li>
+ * <li>{@code PUT  /api/output} - enable or disable the output</li>
+ * <li>{@code PUT  /api/keypad} - lock or unlock the keypad (child lock)</li>
  * <li>{@code POST /api/protection/clear} - clear a tripped protection condition</li>
- * <li>{@code POST /api/exit}             - shut down the application (Basic Auth required)</li>
+ * <li>{@code POST /api/exit} - shut down the application (Basic Auth required)</li>
  * </ul>
  *
  * <p>
- * The {@code /api/exit} endpoint is protected by HTTP Basic Authentication. Credentials are read
- * from a {@code serial-controller.properties} file located next to the running JAR, using the keys
- * {@code exit.username} and {@code exit.password}. If the file is absent or the credentials are
- * missing the endpoint returns {@code 503 Service Unavailable}.
+ * The {@code /api/exit} endpoint is protected by HTTP Basic Authentication. Credentials are read from a
+ * {@link com.serial.AppConfiguration} (sourced from the bundled {@code credentials.properties} and optionally overridden by an
+ * external file), using the keys {@code serialcontroller.admin.username} and {@code serialcontroller.admin.password}. If the
+ * credentials are absent the endpoint returns {@code 503 Service Unavailable}.
  * </p>
  */
 public class RestService {
@@ -101,39 +101,43 @@ public class RestService {
     /** Full URI for administrative application shutdown. */
     public static final String URI_EXIT = API_CONTEXT_ROOT + PATH_EXIT;
 
-    /** Properties file name expected next to the JAR. */
-    private static final String PROPS_FILE = "serial-controller.properties";
-
     private final DeviceService deviceService;
 
+    private final AppConfiguration appConfig;
+
     /** Javalin instance - used by the exit handler to stop the server. */
+    @SuppressWarnings("unused")
     private Javalin javalin;
 
     /** Shutdown callback - called by the exit handler after sending the response. */
     private Runnable shutdownHook;
 
     /**
-     * Constructs a {@code RestService} backed by the given {@link DeviceService}.
+     * Constructs a {@code RestService} backed by the given {@link DeviceService} and {@link AppConfiguration}.
      *
      * @param deviceService the service owning the device connection and state
+     * @param appConfig     application configuration providing exit credentials and server settings
      */
-    public RestService(final DeviceService deviceService) {
+    public RestService(final DeviceService deviceService, final AppConfiguration appConfig) {
         this.deviceService = deviceService;
+        this.appConfig = appConfig;
     }
 
     /**
      * Provides the {@link Javalin} instance and a shutdown callback to the exit handler.
      *
-     * <p>Must be called before {@link #registerRoutes} so that {@code /api/exit} has a reference
-     * to stop the server. The {@code shutdown} runnable is executed on a daemon thread after the
-     * HTTP 204 response has been committed, giving the client time to receive it.</p>
+     * <p>
+     * Must be called before {@link #registerRoutes} so that {@code /api/exit} has a reference to stop the server. The
+     * {@code shutdown} runnable is executed on a daemon thread after the HTTP 204 response has been committed, giving the
+     * client time to receive it.
+     * </p>
      *
      * <pre>
-     *     restService.setShutdown(javalin, () -> {
-     *         deviceService.stop();
-     *         javalin.stop();
-     *         System.exit(0);
-     *     });
+     * restService.setShutdown(javalin, () -> {
+     *     deviceService.stop();
+     *     javalin.stop();
+     *     System.exit(0);
+     * });
      * </pre>
      *
      * @param javalinInstance the running Javalin server
@@ -147,23 +151,25 @@ public class RestService {
     /**
      * Registers all REST routes on the provided {@link JavalinDefaultRoutingApi} instance.
      *
-     * <p>Call this inside the {@code Javalin.create(config -> ...)} lambda, passing
-     * {@code config.routes}:</p>
+     * <p>
+     * Call this inside the {@code Javalin.create(config -> ...)} lambda, passing {@code config.routes}:
+     * </p>
+     * 
      * <pre>
-     *     restService.registerRoutes(config.routes);
+     * restService.registerRoutes(config.routes);
      * </pre>
      *
      * @param router the routing API to register routes on (typically {@code config.routes})
      */
     public void registerRoutes(final JavalinDefaultRoutingApi router) {
-        router.get(URI_STATE,             this::getState);
-        router.get(URI_LIMITS,            this::getLimits);
-        router.put(URI_VOLTAGE,           this::setVoltage);
-        router.put(URI_CURRENT,           this::setCurrent);
-        router.put(URI_OUTPUT,            this::setOutput);
-        router.put(URI_KEYPAD,            this::setKeypad);
+        router.get(URI_STATE, this::getState);
+        router.get(URI_LIMITS, this::getLimits);
+        router.put(URI_VOLTAGE, this::setVoltage);
+        router.put(URI_CURRENT, this::setCurrent);
+        router.put(URI_OUTPUT, this::setOutput);
+        router.put(URI_KEYPAD, this::setKeypad);
         router.post(URI_PROTECTION_CLEAR, this::clearProtection);
-        router.post(URI_EXIT,             this::exit);
+        router.post(URI_EXIT, this::exit);
     }
 
     // -------------------------------------------------------------------------
@@ -190,14 +196,17 @@ public class RestService {
     )
     // @formatter:on
     public void getState(final Context ctx) {
+        logger.info("REST GET /api/state");
         ctx.json(deviceService.getState());
     }
 
     /**
      * Returns the device capability limits from the current converter state.
      *
-     * <p>Useful for clients that need to know the valid voltage/current range before sending
-     * setpoint commands, without fetching the full state snapshot.</p>
+     * <p>
+     * Useful for clients that need to know the valid voltage/current range before sending setpoint commands, without fetching
+     * the full state snapshot.
+     * </p>
      *
      * @param ctx the Javalin request context
      */
@@ -216,19 +225,18 @@ public class RestService {
     )
     // @formatter:on
     public void getLimits(final Context ctx) {
+        logger.info("REST GET /api/limits");
         ConverterState s = deviceService.getState();
-        ctx.json(new LimitsResponse(
-                s.getManufacturer(),
-                s.getDeviceName(),
-                s.getMinVoltage(), s.getMaxVoltage(),
-                s.getMinCurrent(), s.getMaxCurrent(),
-                s.getMaxPower()));
+        ctx.json(new LimitsResponse(s.getManufacturer(), s.getDeviceName(), s.getMinVoltage(), s.getMaxVoltage(),
+                s.getMinCurrent(), s.getMaxCurrent(), s.getMaxPower()));
     }
 
     /**
      * Sets the output voltage setpoint.
      *
-     * <p>Request body: {@code { "voltage": 5.0 }} - voltage in volts.</p>
+     * <p>
+     * Request body: {@code { "voltage": 5.0 }} - voltage in volts.
+     * </p>
      *
      * @param ctx the Javalin request context
      */
@@ -257,6 +265,7 @@ public class RestService {
             return;
         }
         VoltageRequest req = ctx.bodyAsClass(VoltageRequest.class);
+        logger.info("REST PUT /api/voltage: {}", compactBody(ctx.body()));
         try {
             deviceService.setVoltage(req.voltage);
             ctx.status(HttpStatus.NO_CONTENT);
@@ -270,7 +279,9 @@ public class RestService {
     /**
      * Sets the output current setpoint.
      *
-     * <p>Request body: {@code { "current": 1.0 }} - current in amperes.</p>
+     * <p>
+     * Request body: {@code { "current": 1.0 }} - current in amperes.
+     * </p>
      *
      * @param ctx the Javalin request context
      */
@@ -299,6 +310,7 @@ public class RestService {
             return;
         }
         CurrentRequest req = ctx.bodyAsClass(CurrentRequest.class);
+        logger.info("REST PUT /api/current: {}", compactBody(ctx.body()));
         try {
             deviceService.setCurrent(req.current);
             ctx.status(HttpStatus.NO_CONTENT);
@@ -312,7 +324,9 @@ public class RestService {
     /**
      * Enables or disables the converter output.
      *
-     * <p>Request body: {@code { "outputEnable": true }} to enable, {@code { "outputEnable": false }} to disable.</p>
+     * <p>
+     * Request body: {@code { "outputEnable": true }} to enable, {@code { "outputEnable": false }} to disable.
+     * </p>
      *
      * @param ctx the Javalin request context
      */
@@ -340,6 +354,7 @@ public class RestService {
             return;
         }
         OutputRequest req = ctx.bodyAsClass(OutputRequest.class);
+        logger.info("REST PUT /api/output: {}", compactBody(ctx.body()));
         try {
             deviceService.setOutput(req.outputEnable);
             ctx.status(HttpStatus.NO_CONTENT);
@@ -351,7 +366,9 @@ public class RestService {
     /**
      * Locks or unlocks the converter keypad (child lock).
      *
-     * <p>Request body: {@code { "keypadLock": true }} to lock, {@code { "keypadLock": false }} to unlock.</p>
+     * <p>
+     * Request body: {@code { "keypadLock": true }} to lock, {@code { "keypadLock": false }} to unlock.
+     * </p>
      *
      * @param ctx the Javalin request context
      */
@@ -379,6 +396,7 @@ public class RestService {
             return;
         }
         KeypadRequest req = ctx.bodyAsClass(KeypadRequest.class);
+        logger.info("REST PUT /api/keypad: {}", compactBody(ctx.body()));
         try {
             deviceService.setKeypad(req.keypadLock);
             ctx.status(HttpStatus.NO_CONTENT);
@@ -410,6 +428,7 @@ public class RestService {
             ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("No device connected");
             return;
         }
+        logger.info("REST POST /api/protection/clear");
         try {
             deviceService.clearProtection();
             ctx.status(HttpStatus.NO_CONTENT);
@@ -422,9 +441,8 @@ public class RestService {
      * Shuts down the application after verifying HTTP Basic Auth credentials.
      *
      * <p>
-     * Credentials are read from {@code serial-controller.properties} next to the JAR. The shutdown
-     * itself runs on a short-lived daemon thread so the HTTP 204 response is committed before the
-     * server stops.
+     * Credentials are read from {@link com.serial.AppConfiguration} (credentials.properties). The shutdown itself runs on a
+     * short-lived daemon thread so the HTTP 204 response is committed before the server stops.
      * </p>
      *
      * @param ctx the Javalin request context
@@ -434,7 +452,7 @@ public class RestService {
         path        = URI_EXIT,
         methods     = { HttpMethod.POST },
         summary     = "Shut down the application",
-        description = "Performs a clean shutdown of the Serial Controller application. Requires HTTP Basic Authentication (credentials configured in serial-controller.properties next to the JAR).",
+        description = "Performs a clean shutdown of the Serial Controller application. Requires HTTP Basic Authentication (credentials configured in credentials.properties).",
         tags        = { "Admin" },
         security    = {
             @OpenApiSecurity(name = "BasicAuth")
@@ -447,25 +465,18 @@ public class RestService {
     )
     // @formatter:on
     public void exit(final Context ctx) {
-        // Load credentials from properties file next to the JAR
-        Properties props = loadExitCredentials();
-        if (props == null) {
-            ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("Exit credentials not configured (serial-controller.properties not found)");
-            return;
-        }
-
-        String expectedUsername = props.getProperty("exit.username");
-        String expectedPassword = props.getProperty("exit.password");
+        logger.info("REST POST /api/exit");
+        final String expectedUsername = appConfig.getAdminUsername();
+        final String expectedPassword = appConfig.getAdminPassword();
         if (expectedUsername == null || expectedPassword == null) {
-            ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("Exit credentials not configured (exit.username / exit.password missing)");
+            ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result(
+                    "Exit credentials not configured (exit.username / exit.password missing in credentials.properties)");
             return;
         }
 
         // Validate Basic Auth
         BasicAuthCredentials creds = ctx.basicAuthCredentials();
-        if (creds == null
-                || !expectedUsername.equals(creds.getUsername())
-                || !expectedPassword.equals(creds.getPassword())) {
+        if (creds == null || !expectedUsername.equals(creds.getUsername()) || !expectedPassword.equals(creds.getPassword())) {
             ctx.header("WWW-Authenticate", "Basic realm=\"SerialController\"");
             ctx.status(HttpStatus.UNAUTHORIZED).result("Unauthorized");
             return;
@@ -494,24 +505,21 @@ public class RestService {
     // -------------------------------------------------------------------------
 
     /**
-     * Loads the properties file {@code serial-controller.properties} from the working directory
-     * (i.e. next to the JAR).
+     * Returns the request body as a single-line compact JSON string, suitable for logging.
      *
-     * @return loaded {@link Properties}, or {@code null} if the file does not exist or cannot be read
+     * <p>
+     * Parses the raw body string with Jackson and re-serialises it without pretty-printing. If parsing fails (malformed JSON),
+     * the raw body is returned as-is so that the log entry is still present and useful for debugging.
+     * </p>
+     *
+     * @param body raw HTTP request body
+     * @return compact single-line JSON, or the original body if it cannot be parsed
      */
-    private Properties loadExitCredentials() {
-        File file = new File(PROPS_FILE);
-        if (!file.exists()) {
-            logger.warn("Properties file '{}' not found - /api/exit is disabled.", PROPS_FILE);
-            return null;
-        }
-        try (FileInputStream fis = new FileInputStream(file)) {
-            Properties props = new Properties();
-            props.load(fis);
-            return props;
+    private String compactBody(final String body) {
+        try {
+            return deviceService.getObjectMapper().writeValueAsString(deviceService.getObjectMapper().readTree(body));
         } catch (Exception e) {
-            logger.error("Failed to read '{}': {}", PROPS_FILE, e.getMessage());
-            return null;
+            return body;
         }
     }
 
@@ -522,7 +530,9 @@ public class RestService {
     /**
      * Request body for {@code PUT /api/voltage}.
      *
-     * <pre>{ "voltage": 5.0 }</pre>
+     * <pre>
+     * { "voltage": 5.0 }
+     * </pre>
      */
     public static class VoltageRequest {
         /** Output voltage setpoint in volts (V). */
@@ -532,7 +542,9 @@ public class RestService {
     /**
      * Request body for {@code PUT /api/current}.
      *
-     * <pre>{ "current": 1.0 }</pre>
+     * <pre>
+     * { "current": 1.0 }
+     * </pre>
      */
     public static class CurrentRequest {
         /** Output current setpoint in amperes (A). */
@@ -542,7 +554,9 @@ public class RestService {
     /**
      * Request body for {@code PUT /api/output}.
      *
-     * <pre>{ "outputEnable": true }</pre>
+     * <pre>
+     * { "outputEnable": true }
+     * </pre>
      */
     public static class OutputRequest {
         /** {@code true} to enable the output, {@code false} to disable it. */
@@ -552,7 +566,9 @@ public class RestService {
     /**
      * Request body for {@code PUT /api/keypad}.
      *
-     * <pre>{ "keypadLock": true }</pre>
+     * <pre>
+     * { "keypadLock": true }
+     * </pre>
      */
     public static class KeypadRequest {
         /** {@code true} to lock the keypad, {@code false} to unlock it. */
@@ -562,8 +578,10 @@ public class RestService {
     /**
      * Response body for {@code GET /api/limits}.
      *
-     * <p>Contains only the device capability limits - a subset of {@link ConverterState}
-     * useful for clients that need to know valid ranges without fetching the full state.</p>
+     * <p>
+     * Contains only the device capability limits - a subset of {@link ConverterState} useful for clients that need to know
+     * valid ranges without fetching the full state.
+     * </p>
      */
     public static class LimitsResponse {
         /** Device manufacturer name, e.g. {@code "Sinilink"}. */
@@ -592,18 +610,16 @@ public class RestService {
          * @param maxCurrent   maximum output current (A)
          * @param maxPower     maximum output power (W)
          */
-        public LimitsResponse(final String manufacturer, final String deviceName,
-                final double minVoltage, final double maxVoltage,
-                final double minCurrent, final double maxCurrent,
-                final double maxPower) {
+        public LimitsResponse(final String manufacturer, final String deviceName, final double minVoltage,
+                final double maxVoltage, final double minCurrent, final double maxCurrent, final double maxPower) {
             this.manufacturer = manufacturer;
-            this.deviceName   = deviceName;
-            this.minVoltage   = minVoltage;
-            this.maxVoltage   = maxVoltage;
-            this.minCurrent   = minCurrent;
-            this.maxCurrent   = maxCurrent;
-            this.maxPower     = maxPower;
+            this.deviceName = deviceName;
+            this.minVoltage = minVoltage;
+            this.maxVoltage = maxVoltage;
+            this.minCurrent = minCurrent;
+            this.maxCurrent = maxCurrent;
+            this.maxPower = maxPower;
         }
     }
-    
+
 }

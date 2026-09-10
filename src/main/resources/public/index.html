@@ -606,7 +606,7 @@
                     if (d.currentOut         !== undefined) currentOutEl.textContent = d.currentOut.toFixed(2);
                     if (d.powerOut           !== undefined) powerOutEl.textContent   = d.powerOut.toFixed(2);
                     if (d.voltageIn          !== undefined) voltageInEl.textContent  = d.voltageIn.toFixed(2);
-                    if (d.temperatureCelsius !== undefined) tempEl.textContent       = d.temperatureCelsius.toFixed(1) + ' °C';
+                    if (d.temperatureCelsius !== undefined) tempEl.textContent       = d.temperatureCelsius < -273 ? 'N/A' : d.temperatureCelsius.toFixed(1) + ' °C';
                     if (d.cvMode             !== undefined) cvModeEl.textContent     = d.cvMode ? 'CV' : 'CC';
 
                     /* Keypad status row (read-only display in table) */
@@ -645,8 +645,9 @@
                     /* Device identity - merge into page title */
                     if (d.manufacturer !== undefined && d.deviceName !== undefined
                             && d.manufacturer !== 'Unknown' && d.deviceName !== 'Unknown') {
-                        pageTitleEl.textContent = d.manufacturer + ' ' + d.deviceName + ' - Live Monitor';
-                        document.title = d.manufacturer + ' ' + d.deviceName;
+                        const fwSuffix = (d.firmwareVersion && d.firmwareVersion !== '') ? ' (' + d.firmwareVersion + ')' : '';
+                        pageTitleEl.textContent = d.manufacturer + ' ' + d.deviceName + fwSuffix + ' - Live Monitor';
+                        document.title = d.manufacturer + ' ' + d.deviceName + fwSuffix;
                     }
 
                     /* Vin - update amber buck-limit marker */
