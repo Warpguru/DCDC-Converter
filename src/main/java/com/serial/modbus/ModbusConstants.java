@@ -40,5 +40,16 @@ public final class ModbusConstants {
 
     /** Generic digital state OFF / inactive / unlocked / disabled. */
     public static final int STATE_OFF = 0;
+
+    /**
+     * Maximum number of holding registers that may be requested in a single Modbus RTU
+     * "Read Holding Registers" (function code 0x03) frame.
+     *
+     * <p>
+     * Per the Modbus Application Protocol specification, the quantity field is limited to
+     * {@code 0x007D} (125) registers per request.
+     * </p>
+     */
+    public static final int MAX_READ_REGISTERS = 125;
     
 }

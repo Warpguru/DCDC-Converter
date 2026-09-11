@@ -179,7 +179,8 @@ public class ModbusTransport {
      * @param slave address of slave
      * @param reg   Register address to read (0x0000 – 0xFFFF).
      * @return The raw 16-bit register value returned by the device.
-     * @throws Exception If a serial timeout occurs, the Modbus response is malformed, or the CRC validation fails.
+     * @throws Exception If a serial timeout occurs, the Modbus response is malformed, or the CRC
+     *                   validation fails, or the response header does not match the request.
      */
     public int readRegister(final byte slave, final int reg) throws Exception {
         byte[] frame = new byte[8];
@@ -197,6 +198,7 @@ public class ModbusTransport {
         out.flush();
         byte[] resp = readBytes(7);
         verifyCRC(resp);
+        verifyResponseHeader(resp, slave, 2);
         log("RX", resp, null);
         return ((resp[3] & 0xFF) << 8) | (resp[4] & 0xFF);
     }
@@ -239,11 +241,21 @@ public class ModbusTransport {
      *
      * @param slave    Modbus slave address
      * @param startReg starting register address (0x0000–0xFFFF)
-     * @param count    number of registers to read (1–32)
+     * @param count    number of registers to read (1–{@value ModbusConstants#MAX_READ_REGISTERS}); the
+     *                 Modbus specification limits a single "Read Holding Registers" request to
+     *                 {@link ModbusConstants#MAX_READ_REGISTERS} registers
      * @return array of {@code count} raw 16-bit register values in address order
+     * @throws IllegalArgumentException if {@code count} is outside the range
+     *                                  {@code 1–}{@value ModbusConstants#MAX_READ_REGISTERS};
+     *                                  this is a programming error in the caller, not a device fault
      * @throws Exception if a serial timeout occurs, the response is malformed, or CRC validation fails
      */
     public int[] readRegisters(final byte slave, final int startReg, final int count) throws Exception {
+        if (count < 1 || count > ModbusConstants.MAX_READ_REGISTERS) {
+            logger.error("readRegisters() called with invalid count {} (must be 1–{}); this is a programming error",
+                    count, ModbusConstants.MAX_READ_REGISTERS);
+            throw new IllegalArgumentException("count must be 1–" + ModbusConstants.MAX_READ_REGISTERS + ", got: " + count);
+        }
         byte[] frame = new byte[8];
         frame[0] = slave;
         frame[1] = ModbusFunctionCodes.READ_HOLDING_REGISTERS;
@@ -260,6 +272,7 @@ public class ModbusTransport {
         // Response: [slave][fc][byte_count][val_hi][val_lo]... × count [crc_lo][crc_hi]
         byte[] resp = readBytes(3 + count * 2 + 2);
         verifyCRC(resp);
+        verifyResponseHeader(resp, slave, count * 2);
         log("RX", resp, null);
         final int[] values = new int[count];
         for (int i = 0; i < count; i++) {
@@ -406,11 +419,6 @@ public class ModbusTransport {
         log("RX", resp, null);
     }
 
-    @Deprecated
-    void log(final String dir, final byte[] data) {
-        log(dir, data, null);
-    }
-
     /**
      * Logs a Modbus frame via SLF4J, automatically appending a human-readable annotation
      * decoded from the frame bytes themselves.
@@ -433,8 +441,7 @@ public class ModbusTransport {
      * @param data frame bytes to format as hex
      * @param hint optional extra annotation appended after auto-decoded info, or {@code null}
      */
-    @Deprecated
-    void log(final String dir, final byte[] data, final String hint) {
+    private void log(final String dir, final byte[] data, final String hint) {
         // Raw hex bytes at DEBUG - file only, not on console.
         if (logger.isDebugEnabled()) {
             StringBuilder sb = new StringBuilder(dir).append("  ");
@@ -533,18 +540,25 @@ public class ModbusTransport {
     }
 
     /**
-     * Read {@code n} bytes from {@link ModbusTransport#in}.
-     * 
+     * Reads exactly {@code n} bytes from the serial input stream, blocking until all bytes arrive.
+     *
+     * <p>
+     * {@link java.io.InputStream#read(byte[], int, int)} may return fewer bytes than requested on a
+     * single call; the loop accumulates partial reads until {@code n} bytes have been collected.
+     * Both a negative return value (stream closed / end-of-stream) and a zero return value (stalled
+     * stream that would otherwise spin the loop indefinitely) are treated as a serial timeout.
+     * </p>
+     *
      * @param n number of bytes to read
-     * @return byte[] of bytes read
-     * @throws Exception
+     * @return byte array of exactly {@code n} bytes
+     * @throws RuntimeException if the stream returns {@code <= 0}, indicating a timeout or closure
      */
     private byte[] readBytes(final int n) throws Exception {
         byte[] buf = new byte[n];
         int pos = 0;
         while (pos < n) {
             int r = in.read(buf, pos, n - pos);
-            if (r < 0)
+            if (r <= 0)
                 throw new RuntimeException("Serial timeout");
             pos += r;
         }
@@ -552,9 +566,10 @@ public class ModbusTransport {
     }
 
     /**
-     * Write {@code frame} to {@link ModbusTransport#out}.
-     * 
-     * @param frame to write
+     * Verifies the Modbus CRC appended to the end of {@code frame}.
+     *
+     * @param frame complete Modbus RTU frame including the two trailing CRC bytes
+     * @throws RuntimeException if the calculated CRC does not match the received CRC
      */
     private void verifyCRC(final byte[] frame) {
         int len = frame.length;
@@ -562,6 +577,42 @@ public class ModbusTransport {
         int received = ((frame[len - 1] & 0xFF) << 8) | (frame[len - 2] & 0xFF);
         if (calc != received)
             throw new RuntimeException("CRC mismatch");
+    }
+
+    /**
+     * Validates the three-byte header of a "Read Holding Registers" response frame.
+     *
+     * <p>
+     * After CRC has been verified, this method checks:
+     * </p>
+     * <ol>
+     * <li>Byte 0 — slave address matches the request slave.</li>
+     * <li>Byte 1 — function code is {@link ModbusFunctionCodes#READ_HOLDING_REGISTERS} ({@code 0x03}).
+     *     A value of {@code 0x83} indicates a Modbus exception response from the device.</li>
+     * <li>Byte 2 — byte count equals {@code expectedByteCount} ({@code count × 2} for the data
+     *     payload, excluding the header and CRC).</li>
+     * </ol>
+     *
+     * @param resp              response frame (CRC already verified)
+     * @param slave             expected slave address
+     * @param expectedByteCount expected data byte count in the response ({@code count × 2})
+     * @throws RuntimeException if any header field does not match the expected value
+     */
+    private void verifyResponseHeader(final byte[] resp, final byte slave, final int expectedByteCount) {
+        if (resp[0] != slave) {
+            throw new RuntimeException(String.format(
+                    "Unexpected slave in response: expected 0x%02X, got 0x%02X", slave & 0xFF, resp[0] & 0xFF));
+        }
+        if ((resp[1] & 0xFF) != ModbusFunctionCodes.READ_HOLDING_REGISTERS) {
+            throw new RuntimeException(String.format(
+                    "Unexpected function code in response: expected 0x%02X, got 0x%02X",
+                    ModbusFunctionCodes.READ_HOLDING_REGISTERS, resp[1] & 0xFF));
+        }
+        if ((resp[2] & 0xFF) != expectedByteCount) {
+            throw new RuntimeException(String.format(
+                    "Unexpected byte count in response: expected %d, got %d",
+                    expectedByteCount, resp[2] & 0xFF));
+        }
     }
 
 }
