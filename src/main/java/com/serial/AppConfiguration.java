@@ -55,9 +55,9 @@ public class AppConfiguration {
      * Property key for the operator-configured maximum output voltage setpoint.
      *
      * <p>
-     * When present, the user cannot set the output voltage above this value regardless of the
-     * converter's physical capability.  Intended to prevent accidental over-voltage on sensitive
-     * loads (e.g. LiIon cells).  The value must be a positive decimal number in volts.
+     * When present, the user cannot set the output voltage above this value regardless of the converter's physical capability.
+     * Intended to prevent accidental over-voltage on sensitive loads (e.g. LiIon cells). The value must be a positive decimal
+     * number in volts.
      * </p>
      */
     private static final String KEY_MAX_SET_VOLTAGE = "serialcontroller.max.setvoltage";
@@ -66,8 +66,8 @@ public class AppConfiguration {
      * Property key for the operator-configured maximum output current setpoint.
      *
      * <p>
-     * When present, the user cannot set the output current above this value regardless of the
-     * converter's physical capability.  The value must be a positive decimal number in amperes.
+     * When present, the user cannot set the output current above this value regardless of the converter's physical capability.
+     * The value must be a positive decimal number in amperes.
      * </p>
      */
     private static final String KEY_MAX_SET_CURRENT = "serialcontroller.max.setcurrent";
@@ -149,9 +149,8 @@ public class AppConfiguration {
      * Returns the operator-configured maximum output voltage setpoint, if specified.
      *
      * <p>
-     * When present and positive, the user cannot request a voltage above this value via the GUI or
-     * REST API.  When absent or unparseable, returns {@link java.util.OptionalDouble#empty()} and the
-     * converter's own physical limit governs.
+     * When present and positive, the user cannot request a voltage above this value via the GUI or REST API. When absent or
+     * unparseable, returns {@link java.util.OptionalDouble#empty()} and the converter's own physical limit governs.
      * </p>
      *
      * @return the configured maximum voltage in volts, or empty if not specified
@@ -164,9 +163,8 @@ public class AppConfiguration {
      * Returns the operator-configured maximum output current setpoint, if specified.
      *
      * <p>
-     * When present and positive, the user cannot request a current above this value via the GUI or
-     * REST API.  When absent or unparseable, returns {@link java.util.OptionalDouble#empty()} and the
-     * converter's own physical limit governs.
+     * When present and positive, the user cannot request a current above this value via the GUI or REST API. When absent or
+     * unparseable, returns {@link java.util.OptionalDouble#empty()} and the converter's own physical limit governs.
      * </p>
      *
      * @return the configured maximum current in amperes, or empty if not specified

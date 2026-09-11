@@ -9,7 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fazecast.jSerialComm.SerialPort;
-import com.serial.device.DeviceRegister;
+import com.serial.device.base.DeviceRegister;
 
 /**
  * Handles low-level Modbus RTU communication over serial.
@@ -22,14 +22,15 @@ public class ModbusTransport {
      * Primary baud rates for fast first-pass device detection.
      *
      * <p>
-     * Sinilink devices default to 115200 baud while Riden devices default to 9600 baud.
-     * Testing these two rates first allows &gt;99% of connected hardware to be identified
-     * in under 2 seconds.
+     * Sinilink devices default to 115200 baud while Riden devices default to 9600 baud. Testing these two rates first allows
+     * &gt;99% of connected hardware to be identified in under 2 seconds.
      * </p>
      */
+    // @formatter:off
     public static final List<Integer> PRIMARY_BAUDS = List.of(
             ModbusConstants.BAUD_115200,
             ModbusConstants.BAUD_9600);
+    // @formatter:on
 
     /**
      * Secondary fallback baud rates used only if the primary pass fails.
@@ -38,19 +39,23 @@ public class ModbusTransport {
      * Riden units support 19200 baud configuration, which takes precedence over 38400 and 57600.
      * </p>
      */
+    // @formatter:off
     public static final List<Integer> SECONDARY_BAUDS = List.of(
             ModbusConstants.BAUD_19200,
             ModbusConstants.BAUD_38400,
             ModbusConstants.BAUD_57600);
+    // @formatter:on
 
     /**
-     * Complete list of all supported baud rates in probing order, combining {@link #PRIMARY_BAUDS}
-     * and {@link #SECONDARY_BAUDS}.
+     * Complete list of all supported baud rates in probing order, combining {@link #PRIMARY_BAUDS} and
+     * {@link #SECONDARY_BAUDS}.
      */
+    // @formatter:off
     public static final List<Integer> BAUDS = Stream.concat(
             PRIMARY_BAUDS.stream(),
             SECONDARY_BAUDS.stream()
     ).toList();
+    // @formatter:on
 
     /** {@link SerialPort} device name the {@code Modbus} device is connected to. */
     private final String portName;
@@ -88,7 +93,7 @@ public class ModbusTransport {
     public String getPortName() {
         return portName;
     }
-    
+
     /**
      * Close port connected to {@code Modbus} device.
      */
@@ -100,10 +105,9 @@ public class ModbusTransport {
      * Closes and re-opens the serial port at the same baud rate.
      *
      * <p>
-     * Called by {@link com.serial.device.ModbusDevice#reconnect()} after consecutive poll failures,
-     * which indicates the USB-serial adapter was unplugged and re-plugged. jSerialComm requires a
-     * fresh {@link SerialPort} object after a physical disconnect; the existing object cannot be
-     * re-opened.
+     * Called by {@link com.serial.device.ModbusDevice#reconnect()} after consecutive poll failures, which indicates the
+     * USB-serial adapter was unplugged and re-plugged. jSerialComm requires a fresh {@link SerialPort} object after a physical
+     * disconnect; the existing object cannot be re-opened.
      * </p>
      *
      * @throws Exception if the port cannot be re-opened
@@ -179,8 +183,8 @@ public class ModbusTransport {
      * @param slave address of slave
      * @param reg   Register address to read (0x0000 – 0xFFFF).
      * @return The raw 16-bit register value returned by the device.
-     * @throws Exception If a serial timeout occurs, the Modbus response is malformed, or the CRC
-     *                   validation fails, or the response header does not match the request.
+     * @throws Exception If a serial timeout occurs, the Modbus response is malformed, or the CRC validation fails, or the
+     *                   response header does not match the request.
      */
     public int readRegister(final byte slave, final int reg) throws Exception {
         byte[] frame = new byte[8];
@@ -207,10 +211,10 @@ public class ModbusTransport {
      * Reads multiple consecutive 16-bit holding registers in a single Modbus RTU frame.
      *
      * <p>
-     * Sends a single Modbus "Read Holding Registers" request (function code 0x03) for {@code count}
-     * consecutive registers starting at {@code startReg}, and returns all values in one array.
-     * This is more efficient than calling {@link #readRegister} in a loop because it uses only
-     * one serial round-trip regardless of how many registers are requested.
+     * Sends a single Modbus "Read Holding Registers" request (function code 0x03) for {@code count} consecutive registers
+     * starting at {@code startReg}, and returns all values in one array. This is more efficient than calling
+     * {@link #readRegister} in a loop because it uses only one serial round-trip regardless of how many registers are
+     * requested.
      * </p>
      *
      * <p>
@@ -230,30 +234,29 @@ public class ModbusTransport {
      * </pre>
      *
      * <p>
-     * Example — read 19 registers starting at 0x0000:
+     * Example - read 19 registers starting at 0x0000:
      * </p>
      *
      * <pre>
      * int[] regs = readRegisters(slave, 0x0000, 19);
-     * double volts = regs[0] / 100.0;  // VSET at offset 0
-     * double amps  = regs[1] / 1000.0; // ISET at offset 1
+     * double volts = regs[0] / 100.0; // VSET at offset 0
+     * double amps = regs[1] / 1000.0; // ISET at offset 1
      * </pre>
      *
      * @param slave    Modbus slave address
      * @param startReg starting register address (0x0000–0xFFFF)
-     * @param count    number of registers to read (1–{@value ModbusConstants#MAX_READ_REGISTERS}); the
-     *                 Modbus specification limits a single "Read Holding Registers" request to
-     *                 {@link ModbusConstants#MAX_READ_REGISTERS} registers
+     * @param count    number of registers to read (1–{@value ModbusConstants#MAX_READ_REGISTERS}); the Modbus specification
+     *                 limits a single "Read Holding Registers" request to {@link ModbusConstants#MAX_READ_REGISTERS} registers
      * @return array of {@code count} raw 16-bit register values in address order
      * @throws IllegalArgumentException if {@code count} is outside the range
-     *                                  {@code 1–}{@value ModbusConstants#MAX_READ_REGISTERS};
-     *                                  this is a programming error in the caller, not a device fault
-     * @throws Exception if a serial timeout occurs, the response is malformed, or CRC validation fails
+     *                                  {@code 1–}{@value ModbusConstants#MAX_READ_REGISTERS}; this is a programming error in
+     *                                  the caller, not a device fault
+     * @throws Exception                if a serial timeout occurs, the response is malformed, or CRC validation fails
      */
     public int[] readRegisters(final byte slave, final int startReg, final int count) throws Exception {
         if (count < 1 || count > ModbusConstants.MAX_READ_REGISTERS) {
-            logger.error("readRegisters() called with invalid count {} (must be 1–{}); this is a programming error",
-                    count, ModbusConstants.MAX_READ_REGISTERS);
+            logger.error("readRegisters() called with invalid count {} (must be 1–{}); this is a programming error", count,
+                    ModbusConstants.MAX_READ_REGISTERS);
             throw new IllegalArgumentException("count must be 1–" + ModbusConstants.MAX_READ_REGISTERS + ", got: " + count);
         }
         byte[] frame = new byte[8];
@@ -285,10 +288,9 @@ public class ModbusTransport {
      * Writes 16-bit values to multiple consecutive holding registers in a single Modbus RTU frame.
      *
      * <p>
-     * Sends a single Modbus "Write Multiple Registers" request (function code 0x10) for
-     * {@code values.length} consecutive registers starting at {@code startReg}.
-     * This is more efficient than calling {@link #writeRegister} in a loop when two or more
-     * adjacent registers must be updated atomically (e.g. VSET and ISET).
+     * Sends a single Modbus "Write Multiple Registers" request (function code 0x10) for {@code values.length} consecutive
+     * registers starting at {@code startReg}. This is more efficient than calling {@link #writeRegister} in a loop when two or
+     * more adjacent registers must be updated atomically (e.g. VSET and ISET).
      * </p>
      *
      * <p>
@@ -308,7 +310,7 @@ public class ModbusTransport {
      * </pre>
      *
      * <p>
-     * Example — write VSET and ISET atomically on a Sinilink (addresses 0x0000–0x0001):
+     * Example - write VSET and ISET atomically on a Sinilink (addresses 0x0000–0x0001):
      * </p>
      *
      * <pre>
@@ -333,7 +335,7 @@ public class ModbusTransport {
         frame[5] = (byte) qty;
         frame[6] = (byte) byteCount;
         for (int i = 0; i < qty; i++) {
-            frame[7 + i * 2]     = (byte) (values[i] >> 8);
+            frame[7 + i * 2] = (byte) (values[i] >> 8);
             frame[7 + i * 2 + 1] = (byte) values[i];
         }
         int crc = ModbusCRC.calculate(frame, frame.length - 2);
@@ -420,16 +422,21 @@ public class ModbusTransport {
     }
 
     /**
-     * Logs a Modbus frame via SLF4J, automatically appending a human-readable annotation
-     * decoded from the frame bytes themselves.
+     * Logs a Modbus frame via SLF4J, automatically appending a human-readable annotation decoded from the frame bytes
+     * themselves.
      *
-     * <p>Log levels:</p>
+     * <p>
+     * Log levels:
+     * </p>
      * <ul>
      * <li>Raw hex bytes (TX/RX) → {@code DEBUG} - visible in the log file, suppressed on the console.</li>
      * <li>Decoded annotation ({@code -> Value = …}) → {@code TRACE} - log file only, deepest detail.</li>
      * </ul>
      *
-     * <p>Example output:</p>
+     * <p>
+     * Example output:
+     * </p>
+     * 
      * <pre>
      * DEBUG TX  01 03 00 17 00 01 34 0E
      * TRACE     -> Read 0x0017
@@ -455,9 +462,12 @@ public class ModbusTransport {
             String auto = decodeFrame(dir, data);
             if (auto != null || hint != null) {
                 StringBuilder detail = new StringBuilder("    -> ");
-                if (auto != null) detail.append(auto);
-                if (auto != null && hint != null) detail.append(", ");
-                if (hint != null) detail.append(hint);
+                if (auto != null)
+                    detail.append(auto);
+                if (auto != null && hint != null)
+                    detail.append(", ");
+                if (hint != null)
+                    detail.append(hint);
                 logger.trace(detail.toString());
             }
         }
@@ -466,10 +476,12 @@ public class ModbusTransport {
     /**
      * Derives a short human-readable annotation from a raw Modbus RTU frame.
      *
-     * <p>Handles all three function codes used by the devices in this project:</p>
+     * <p>
+     * Handles all three function codes used by the devices in this project:
+     * </p>
      * <ul>
      * <li>TX fc=0x03: single-register read → {@code "Read <name>"}; multi-register read →
-     *     {@code "Read 0x0000–0x0012 (19 regs)"}.</li>
+     * {@code "Read 0x0000–0x0012 (19 regs)"}.</li>
      * <li>TX fc=0x06: single-register write → {@code "Write <name> = <value>"}.</li>
      * <li>TX fc=0x10: multi-register write → {@code "Write 0x0000–0x0001 (2 regs)"}.</li>
      * <li>RX fc=0x03 (7 bytes, single-register response): {@code "Value = <n> (0x…)"}.</li>
@@ -477,7 +489,9 @@ public class ModbusTransport {
      * <li>RX fc=0x06: echoed register address and value.</li>
      * <li>RX fc=0x10: echoed start address and quantity.</li>
      * </ul>
-     * <p>Returns {@code null} for unrecognised frames or frames that are too short to decode.</p>
+     * <p>
+     * Returns {@code null} for unrecognised frames or frames that are too short to decode.
+     * </p>
      *
      * @param dir  direction label ({@code "TX"} or {@code "RX"})
      * @param data raw frame bytes
@@ -522,17 +536,17 @@ public class ModbusTransport {
                     return String.format("Read %d regs, %d data bytes", byteCount / 2, byteCount);
                 }
             }
-            // RX: fc=0x06 write echo — [slave][0x06][reg_hi][reg_lo][val_hi][val_lo][crc×2]
+            // RX: fc=0x06 write echo - [slave][0x06][reg_hi][reg_lo][val_hi][val_lo][crc×2]
             if (fc == ModbusFunctionCodes.WRITE_SINGLE_REGISTER && data.length >= 6) {
                 final int reg = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
                 final String regName = DeviceRegister.REGISTRY.getOrDefault(reg, String.format("0x%04X", reg));
                 final int val = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
                 return String.format("Write %s = %d", regName, val);
             }
-            // RX: fc=0x10 ack — [slave][0x10][start_hi][start_lo][qty_hi][qty_lo][crc×2]
+            // RX: fc=0x10 ack - [slave][0x10][start_hi][start_lo][qty_hi][qty_lo][crc×2]
             if (fc == ModbusFunctionCodes.WRITE_MULTIPLE_REGISTERS && data.length == 8) {
                 final int start = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
-                final int qty   = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
+                final int qty = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
                 return String.format("Wrote 0x%04X–0x%04X (%d regs)", start, start + qty - 1, qty);
             }
         }
@@ -543,10 +557,10 @@ public class ModbusTransport {
      * Reads exactly {@code n} bytes from the serial input stream, blocking until all bytes arrive.
      *
      * <p>
-     * {@link java.io.InputStream#read(byte[], int, int)} may return fewer bytes than requested on a
-     * single call; the loop accumulates partial reads until {@code n} bytes have been collected.
-     * Both a negative return value (stream closed / end-of-stream) and a zero return value (stalled
-     * stream that would otherwise spin the loop indefinitely) are treated as a serial timeout.
+     * {@link java.io.InputStream#read(byte[], int, int)} may return fewer bytes than requested on a single call; the loop
+     * accumulates partial reads until {@code n} bytes have been collected. Both a negative return value (stream closed /
+     * end-of-stream) and a zero return value (stalled stream that would otherwise spin the loop indefinitely) are treated as a
+     * serial timeout.
      * </p>
      *
      * @param n number of bytes to read
@@ -586,11 +600,11 @@ public class ModbusTransport {
      * After CRC has been verified, this method checks:
      * </p>
      * <ol>
-     * <li>Byte 0 — slave address matches the request slave.</li>
-     * <li>Byte 1 — function code is {@link ModbusFunctionCodes#READ_HOLDING_REGISTERS} ({@code 0x03}).
-     *     A value of {@code 0x83} indicates a Modbus exception response from the device.</li>
-     * <li>Byte 2 — byte count equals {@code expectedByteCount} ({@code count × 2} for the data
-     *     payload, excluding the header and CRC).</li>
+     * <li>Byte 0 - slave address matches the request slave.</li>
+     * <li>Byte 1 - function code is {@link ModbusFunctionCodes#READ_HOLDING_REGISTERS} ({@code 0x03}). A value of {@code 0x83}
+     * indicates a Modbus exception response from the device.</li>
+     * <li>Byte 2 - byte count equals {@code expectedByteCount} ({@code count × 2} for the data payload, excluding the header
+     * and CRC).</li>
      * </ol>
      *
      * @param resp              response frame (CRC already verified)
@@ -600,18 +614,16 @@ public class ModbusTransport {
      */
     private void verifyResponseHeader(final byte[] resp, final byte slave, final int expectedByteCount) {
         if (resp[0] != slave) {
-            throw new RuntimeException(String.format(
-                    "Unexpected slave in response: expected 0x%02X, got 0x%02X", slave & 0xFF, resp[0] & 0xFF));
+            throw new RuntimeException(
+                    String.format("Unexpected slave in response: expected 0x%02X, got 0x%02X", slave & 0xFF, resp[0] & 0xFF));
         }
         if ((resp[1] & 0xFF) != ModbusFunctionCodes.READ_HOLDING_REGISTERS) {
-            throw new RuntimeException(String.format(
-                    "Unexpected function code in response: expected 0x%02X, got 0x%02X",
+            throw new RuntimeException(String.format("Unexpected function code in response: expected 0x%02X, got 0x%02X",
                     ModbusFunctionCodes.READ_HOLDING_REGISTERS, resp[1] & 0xFF));
         }
         if ((resp[2] & 0xFF) != expectedByteCount) {
-            throw new RuntimeException(String.format(
-                    "Unexpected byte count in response: expected %d, got %d",
-                    expectedByteCount, resp[2] & 0xFF));
+            throw new RuntimeException(
+                    String.format("Unexpected byte count in response: expected %d, got %d", expectedByteCount, resp[2] & 0xFF));
         }
     }
 

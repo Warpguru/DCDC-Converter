@@ -31,17 +31,17 @@ import com.serial.modbus.ModbusTransport;
  * </ol>
  *
  * <p>
- * <strong>Threading model:</strong> Only one application-owned background thread exists - the Modbus poller.
- * All write methods ({@link #setVoltage}, {@link #setCurrent}, {@link #setOutput}, {@link #clearProtection})
- * and the poll method are {@code synchronized} on this instance. This prevents concurrent serial port access
- * and maps directly to a FreeRTOS mutex in the planned ESP32 C port. No Java-specific concurrency abstractions
- * (e.g. {@code ExecutorService}, {@code CompletableFuture}) are used in the service layer.
+ * <strong>Threading model:</strong> Only one application-owned background thread exists - the Modbus poller. All write methods
+ * ({@link #setVoltage}, {@link #setCurrent}, {@link #setOutput}, {@link #clearProtection}) and the poll method are
+ * {@code synchronized} on this instance. This prevents concurrent serial port access and maps directly to a FreeRTOS mutex in
+ * the planned ESP32 C port. No Java-specific concurrency abstractions (e.g. {@code ExecutorService}, {@code CompletableFuture})
+ * are used in the service layer.
  * </p>
  *
  * <p>
- * <strong>Modbus RTU is strictly master/slave:</strong> The device never transmits unsolicited data. Changes
- * made on the device's physical front panel are discovered only when the relevant registers are polled.
- * The polling thread therefore reads both measured values and setpoints every cycle.
+ * <strong>Modbus RTU is strictly master/slave:</strong> The device never transmits unsolicited data. Changes made on the
+ * device's physical front panel are discovered only when the relevant registers are polled. The polling thread therefore reads
+ * both measured values and setpoints every cycle.
  * </p>
  */
 public class DeviceService {
@@ -55,8 +55,8 @@ public class DeviceService {
     private static final String PROP_TOPOLOGY = "device.topology";
 
     /**
-     * Dropout voltage in volts subtracted from Vin to derive the effective maximum output voltage
-     * for {@link ConverterTopology#BUCK} converters.
+     * Dropout voltage in volts subtracted from Vin to derive the effective maximum output voltage for
+     * {@link ConverterTopology#BUCK} converters.
      */
     private static final double BUCK_DROPOUT_V = 1.0;
 
@@ -64,15 +64,14 @@ public class DeviceService {
     private static final int POLL_INTERVAL_MS = 1000;
 
     /**
-     * Duration in milliseconds during which the poll loop will not overwrite a setpoint in
-     * {@link ConverterState} after a user write.
+     * Duration in milliseconds during which the poll loop will not overwrite a setpoint in {@link ConverterState} after a user
+     * write.
      *
      * <p>
-     * Immediately after {@link #setVoltage} or {@link #setCurrent} writes a value to the device,
-     * the first one or two poll cycles may read back a slightly different value from the converter's
-     * register (quantisation, ADC settling, firmware latency). If that transient value were
-     * broadcast to the GUI it would cause a brief flicker. Suppressing the poll-overwrite for this
-     * window keeps {@code ConverterState} stable until the device register has settled.
+     * Immediately after {@link #setVoltage} or {@link #setCurrent} writes a value to the device, the first one or two poll
+     * cycles may read back a slightly different value from the converter's register (quantisation, ADC settling, firmware
+     * latency). If that transient value were broadcast to the GUI it would cause a brief flicker. Suppressing the
+     * poll-overwrite for this window keeps {@code ConverterState} stable until the device register has settled.
      * </p>
      */
     private static final long SETPOINT_SETTLE_MS = 2000L;
@@ -81,9 +80,8 @@ public class DeviceService {
      * Shared Jackson {@link ObjectMapper} instance.
      *
      * <p>
-     * A single instance is created here and shared with {@link WebSocketService} and
-     * {@link RestService}. {@code ObjectMapper} is thread-safe after configuration and
-     * expensive to construct - one instance per application is the correct pattern.
+     * A single instance is created here and shared with {@link WebSocketService} and {@link RestService}. {@code ObjectMapper}
+     * is thread-safe after configuration and expensive to construct - one instance per application is the correct pattern.
      * </p>
      */
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -101,31 +99,30 @@ public class DeviceService {
     private volatile boolean running;
 
     /**
-     * Number of consecutive <em>non-timeout</em> poll failures that triggers a transport reconnect
-     * and sets the device Offline.
+     * Number of consecutive <em>non-timeout</em> poll failures that triggers a transport reconnect and sets the device Offline.
      *
      * <p>
-     * Serial timeouts bypass this counter and go Offline immediately because a timeout is
-     * unambiguous evidence that the device stopped responding (see {@link #poll()}).
+     * Serial timeouts bypass this counter and go Offline immediately because a timeout is unambiguous evidence that the device
+     * stopped responding (see {@link #poll()}).
      * </p>
      */
     private static final int MAX_CONSECUTIVE_FAILURES = 3;
 
     /**
-     * Number of consecutive fully-successful poll cycles required before the device is declared
-     * Online again after having been Offline.
+     * Number of consecutive fully-successful poll cycles required before the device is declared Online again after having been
+     * Offline.
      *
      * <p>
-     * Set to 1: once a reconnect succeeds and the first full poll completes without error, the
-     * device is communicating normally. There is no benefit to waiting for additional confirmations
-     * because a completed poll already validates every register read in the cycle.
+     * Set to 1: once a reconnect succeeds and the first full poll completes without error, the device is communicating
+     * normally. There is no benefit to waiting for additional confirmations because a completed poll already validates every
+     * register read in the cycle.
      * </p>
      */
     private static final int MAX_CONSECUTIVE_SUCCESSES = 1;
 
     /**
-     * Exception message fragment thrown by {@link com.serial.modbus.ModbusTransport} when the
-     * serial read times out. Used to distinguish a timeout from other poll failures.
+     * Exception message fragment thrown by {@link com.serial.modbus.ModbusTransport} when the serial read times out. Used to
+     * distinguish a timeout from other poll failures.
      */
     private static final String ERR_SERIAL_TIMEOUT = "Serial timeout";
 
@@ -133,10 +130,9 @@ public class DeviceService {
      * Number of consecutive poll failures since the last successful poll.
      *
      * <p>
-     * Incremented on each non-timeout failed poll; reset to zero on a full success. When it
-     * reaches {@link #MAX_CONSECUTIVE_FAILURES} a transport reconnect is attempted and
-     * {@link ConverterState#setDeviceOnline(boolean)} is set to {@code false}.
-     * Serial timeouts skip this counter and trigger an immediate Offline + reconnect.
+     * Incremented on each non-timeout failed poll; reset to zero on a full success. When it reaches
+     * {@link #MAX_CONSECUTIVE_FAILURES} a transport reconnect is attempted and {@link ConverterState#setDeviceOnline(boolean)}
+     * is set to {@code false}. Serial timeouts skip this counter and trigger an immediate Offline + reconnect.
      * </p>
      */
     private int consecutiveFailures;
@@ -146,9 +142,8 @@ public class DeviceService {
      * {@link ConverterState#setVoltageSet} with the value read back from the device.
      *
      * <p>
-     * Set to {@code System.currentTimeMillis() + SETPOINT_SETTLE_MS} whenever {@link #setVoltage}
-     * writes a new setpoint so that transient device-register values are not broadcast to clients
-     * during the settle window.
+     * Set to {@code System.currentTimeMillis() + SETPOINT_SETTLE_MS} whenever {@link #setVoltage} writes a new setpoint so that
+     * transient device-register values are not broadcast to clients during the settle window.
      * </p>
      */
     private volatile long voltagePendingUntil = 0L;
@@ -158,8 +153,7 @@ public class DeviceService {
      * {@link ConverterState#setCurrentSet} with the value read back from the device.
      *
      * <p>
-     * Set to {@code System.currentTimeMillis() + SETPOINT_SETTLE_MS} whenever {@link #setCurrent}
-     * writes a new setpoint.
+     * Set to {@code System.currentTimeMillis() + SETPOINT_SETTLE_MS} whenever {@link #setCurrent} writes a new setpoint.
      * </p>
      */
     private volatile long currentPendingUntil = 0L;
@@ -168,29 +162,29 @@ public class DeviceService {
      * Number of consecutive fully-successful poll cycles since the device went Offline.
      *
      * <p>
-     * Only counted while the device is Offline. When it reaches {@link #MAX_CONSECUTIVE_SUCCESSES}
-     * the device is declared Online and this counter is reset.
+     * Only counted while the device is Offline. When it reaches {@link #MAX_CONSECUTIVE_SUCCESSES} the device is declared
+     * Online and this counter is reset.
      * </p>
      */
     private int consecutiveSuccesses;
 
     /**
-     * Constructs a new {@code DeviceService}, detects the converter on the given port, loads its capability
-     * limits from a properties file, applies any operator-configured setpoint caps from
-     * {@link AppConfiguration}, and reads the initial setpoints from the device.
+     * Constructs a new {@code DeviceService}, detects the converter on the given port, loads its capability limits from a
+     * properties file, applies any operator-configured setpoint caps from {@link AppConfiguration}, and reads the initial
+     * setpoints from the device.
      *
      * <p>
-     * Device detection order: Sinilink → RidenRD50xx → RidenRD60xx. The first driver that successfully
-     * identifies a device is used.
+     * Device detection order: Sinilink → RidenRD50xx → RidenRD60xx. The first driver that successfully identifies a device is
+     * used.
      * </p>
      *
      * <p>
-     * If no device is detected, the service continues with {@code null} converter and zeroed limits.
-     * The polling thread will skip device reads in that case.
+     * If no device is detected, the service continues with {@code null} converter and zeroed limits. The polling thread will
+     * skip device reads in that case.
      * </p>
      *
-     * @param portName serial port name, e.g. {@code "COM3"} or {@code "/dev/ttyUSB0"}
-     * @param appConfiguration   application configuration; used to read optional setpoint cap properties
+     * @param portName         serial port name, e.g. {@code "COM3"} or {@code "/dev/ttyUSB0"}
+     * @param appConfiguration application configuration; used to read optional setpoint cap properties
      */
     public DeviceService(final String portName, final AppConfiguration appConfiguration) {
         detectDevice(portName);
@@ -207,8 +201,8 @@ public class DeviceService {
      * Starts the background Modbus polling thread.
      *
      * <p>
-     * Must be called after the Javalin server is initialised so that WebSocket push can start as soon as
-     * the first poll completes.
+     * Must be called after the Javalin server is initialised so that WebSocket push can start as soon as the first poll
+     * completes.
      * </p>
      */
     public void start() {
@@ -238,8 +232,8 @@ public class DeviceService {
      * Returns the shared {@link ConverterState}.
      *
      * <p>
-     * The returned instance is the live object updated by the polling thread. Callers may read any field
-     * directly - all fields are {@code volatile}. No lock is needed for reads.
+     * The returned instance is the live object updated by the polling thread. Callers may read any field directly - all fields
+     * are {@code volatile}. No lock is needed for reads.
      * </p>
      *
      * @return the current converter state
@@ -252,9 +246,8 @@ public class DeviceService {
      * Returns the shared {@link ObjectMapper} instance.
      *
      * <p>
-     * Used by {@link WebSocketService} and {@link RestService} to serialise
-     * {@link ConverterState} to JSON. Sharing a single instance avoids the overhead of
-     * constructing multiple mappers.
+     * Used by {@link WebSocketService} and {@link RestService} to serialise {@link ConverterState} to JSON. Sharing a single
+     * instance avoids the overhead of constructing multiple mappers.
      * </p>
      *
      * @return the application-wide Jackson {@code ObjectMapper}
@@ -285,9 +278,9 @@ public class DeviceService {
      * </p>
      *
      * <p>
-     * This method is {@code synchronized} to prevent concurrent serial port access from simultaneous REST
-     * and WebSocket calls, and to prevent overlap with the polling thread. In the ESP32 C port this
-     * corresponds to {@code xSemaphoreTake} on the Modbus mutex.
+     * This method is {@code synchronized} to prevent concurrent serial port access from simultaneous REST and WebSocket calls,
+     * and to prevent overlap with the polling thread. In the ESP32 C port this corresponds to {@code xSemaphoreTake} on the
+     * Modbus mutex.
      * </p>
      *
      * @param volts voltage setpoint in volts (V)
@@ -350,8 +343,8 @@ public class DeviceService {
      * Clears a tripped protection state on the device and resets {@link ConverterState#setProtectionState} to 0.
      *
      * <p>
-     * Writing {@code false} (0) to the protection register resets the protection condition so the device
-     * can resume normal operation.
+     * Writing {@code false} (0) to the protection register resets the protection condition so the device can resume normal
+     * operation.
      * </p>
      *
      * @throws Exception if the Modbus write fails
@@ -367,18 +360,17 @@ public class DeviceService {
     // -------------------------------------------------------------------------
 
     /**
-     * Attempts to detect a supported DC/DC converter on the given serial port using an optimized
-     * two-pass probing algorithm.
+     * Attempts to detect a supported DC/DC converter on the given serial port using an optimized two-pass probing algorithm.
      *
      * <p>
-     * <strong>Pass 1 (Primary / Fast):</strong> Probes primary baud rates ({@link ModbusTransport#PRIMARY_BAUDS}:
-     * 115200 and 9600 baud) across Sinilink, RidenRD50xx, and RidenRD60xx. Testing these two predominant
-     * rates detects &gt;99% of converters in &lt;2 seconds and terminates immediately on a match.
+     * <strong>Pass 1 (Primary / Fast):</strong> Probes primary baud rates ({@link ModbusTransport#PRIMARY_BAUDS}: 115200 and
+     * 9600 baud) across Sinilink, RidenRD50xx, and RidenRD60xx. Testing these two predominant rates detects &gt;99% of
+     * converters in &lt;2 seconds and terminates immediately on a match.
      * </p>
      *
      * <p>
-     * <strong>Pass 2 (Secondary / Fallback):</strong> Executed only if Pass 1 found no device. Probes fallback
-     * baud rates ({@link ModbusTransport#SECONDARY_BAUDS}: 19200, 38400, 57600 baud).
+     * <strong>Pass 2 (Secondary / Fallback):</strong> Executed only if Pass 1 found no device. Probes fallback baud rates
+     * ({@link ModbusTransport#SECONDARY_BAUDS}: 19200, 38400, 57600 baud).
      * </p>
      *
      * @param portName serial port name
@@ -447,25 +439,23 @@ public class DeviceService {
      * Loads device capability limits from the matching properties file on the classpath.
      *
      * <p>
-     * The file is located at {@code /devices/<deviceName>.properties} where {@code deviceName} is the
-     * string returned by the driver after detection (e.g. {@code "XY6008"}, {@code "RD5020"}).
+     * The file is located at {@code /devices/<deviceName>.properties} where {@code deviceName} is the string returned by the
+     * driver after detection (e.g. {@code "XY6008"}, {@code "RD5020"}).
      * </p>
      *
      * <p>
-     * If the file is not found or cannot be parsed, a warning is logged and all limits remain at 0,
-     * which prevents any write operations from being accepted until limits are known.
+     * If the file is not found or cannot be parsed, a warning is logged and all limits remain at 0, which prevents any write
+     * operations from being accepted until limits are known.
      * </p>
      */
     private void applyConfigLimits(final AppConfiguration config) {
         config.getMaxSetVoltage().ifPresent(cap -> {
             state.setConfigMaxVoltage(cap);
-            logger.info("Operator voltage cap applied: max setpoint = {} V (device max = {} V)",
-                        cap, state.getMaxVoltage());
+            logger.info("Operator voltage cap applied: max setpoint = {} V (device max = {} V)", cap, state.getMaxVoltage());
         });
         config.getMaxSetCurrent().ifPresent(cap -> {
             state.setConfigMaxCurrent(cap);
-            logger.info("Operator current cap applied: max setpoint = {} A (device max = {} A)",
-                        cap, state.getMaxCurrent());
+            logger.info("Operator current cap applied: max setpoint = {} A (device max = {} A)", cap, state.getMaxCurrent());
         });
     }
 
@@ -524,12 +514,9 @@ public class DeviceService {
             state.setMaxPower(parseDouble(props, "device.maxPower", 0.0));
             state.setConverterTopology(parseTopology(props));
 
-            logger.info("Device limits loaded: {} {} | topology={} V=[{}, {}] A=[{}, {}] P_max={}W",
-                    state.getManufacturer(), state.getDeviceName(),
-                    state.getConverterTopology(),
-                    state.getMinVoltage(), state.getMaxVoltage(),
-                    state.getMinCurrent(), state.getMaxCurrent(),
-                    state.getMaxPower());
+            logger.info("Device limits loaded: {} {} | topology={} V=[{}, {}] A=[{}, {}] P_max={}W", state.getManufacturer(),
+                    state.getDeviceName(), state.getConverterTopology(), state.getMinVoltage(), state.getMaxVoltage(),
+                    state.getMinCurrent(), state.getMaxCurrent(), state.getMaxPower());
 
         } catch (Exception e) {
             logger.error("Failed to load device limits from {}: {}", path, e.getMessage());
@@ -563,21 +550,20 @@ public class DeviceService {
     // -------------------------------------------------------------------------
 
     /**
-     * Performs an initial bulk poll so that all {@link ConverterState} fields are populated
-     * before the polling thread starts and before the first page load.
+     * Performs an initial bulk poll so that all {@link ConverterState} fields are populated before the polling thread starts
+     * and before the first page load.
      *
      * <p>
-     * Calls {@link com.serial.devices.ifc.DC2DCConverter#pollAll()} to populate the driver cache,
-     * then reads all values — including the true voltage and current setpoints (VSET/ISET) via
+     * Calls {@link com.serial.devices.ifc.DC2DCConverter#pollAll()} to populate the driver cache, then reads all values -
+     * including the true voltage and current setpoints (VSET/ISET) via
      * {@link com.serial.devices.ifc.DC2DCConverter#getVoltageSet()} /
-     * {@link com.serial.devices.ifc.DC2DCConverter#getCurrentSet()} — into {@link ConverterState}.
+     * {@link com.serial.devices.ifc.DC2DCConverter#getCurrentSet()} - into {@link ConverterState}.
      * </p>
      *
      * <p>
-     * If {@code pollAll()} throws, the exception is caught and logged at {@code WARN} level. In that
-     * case all driver cache fields and all {@link ConverterState} fields remain at their
-     * zero-initialised defaults ({@code 0} / {@code 0.0} / {@code false}) until the first
-     * successful poll cycle executed by the {@code modbus-poller} thread.
+     * If {@code pollAll()} throws, the exception is caught and logged at {@code WARN} level. In that case all driver cache
+     * fields and all {@link ConverterState} fields remain at their zero-initialised defaults ({@code 0} / {@code 0.0} /
+     * {@code false}) until the first successful poll cycle executed by the {@code modbus-poller} thread.
      * </p>
      */
     private void readInitialSetpoints() {
@@ -597,10 +583,9 @@ public class DeviceService {
             state.setCvMode(converter.isCvMode());
             state.setVoltageSet(converter.getVoltageSet());
             state.setCurrentSet(converter.getCurrentSet());
-            logger.info("Initial state read: vOut={}V iOut={}A vSet={}V iSet={}A output={} keypad={}",
-                    state.getVoltageOut(), state.getCurrentOut(),
-                    state.getVoltageSet(), state.getCurrentSet(),
-                    state.isOutputEnabled(), state.isKeypadLocked());
+            logger.info("Initial state read: vOut={}V iOut={}A vSet={}V iSet={}A output={} keypad={}", state.getVoltageOut(),
+                    state.getCurrentOut(), state.getVoltageSet(), state.getCurrentSet(), state.isOutputEnabled(),
+                    state.isKeypadLocked());
         } catch (Exception e) {
             logger.warn("Could not read initial state: {}", e.getMessage());
         }
@@ -614,8 +599,8 @@ public class DeviceService {
      * Main body of the background polling thread.
      *
      * <p>
-     * Runs until {@link #running} is set to {@code false} or the thread is interrupted. On each cycle,
-     * calls {@link #poll()} under the instance lock, then sleeps for {@link #POLL_INTERVAL_MS}.
+     * Runs until {@link #running} is set to {@code false} or the thread is interrupted. On each cycle, calls {@link #poll()}
+     * under the instance lock, then sleeps for {@link #POLL_INTERVAL_MS}.
      * </p>
      */
     private void pollLoop() {
@@ -635,21 +620,20 @@ public class DeviceService {
      * Reads all relevant device registers and updates {@link ConverterState}.
      *
      * <p>
-     * This method is {@code synchronized} to prevent concurrent serial port access from write operations
-     * issued by REST handlers or WebSocket message handlers.
+     * This method is {@code synchronized} to prevent concurrent serial port access from write operations issued by REST
+     * handlers or WebSocket message handlers.
      * </p>
      *
      * <p>
-     * A single {@link com.serial.devices.ifc.DC2DCConverter#pollAll()} call fetches the entire
-     * register block in one Modbus frame, populating the driver's internal cache. All subsequent
-     * getter calls in this method return the freshly cached values without additional serial I/O.
-     * Setpoints (VSET/ISET) are included in the same bulk read, so front-panel changes are also
-     * detected every cycle.
+     * A single {@link com.serial.devices.ifc.DC2DCConverter#pollAll()} call fetches the entire register block in one Modbus
+     * frame, populating the driver's internal cache. All subsequent getter calls in this method return the freshly cached
+     * values without additional serial I/O. Setpoints (VSET/ISET) are included in the same bulk read, so front-panel changes
+     * are also detected every cycle.
      * </p>
      *
      * <p>
-     * If the device is not detected or a read fails, the error is logged and the poll cycle is skipped
-     * without crashing the thread.
+     * If the device is not detected or a read fails, the error is logged and the poll cycle is skipped without crashing the
+     * thread.
      * </p>
      */
     private synchronized void poll() {
@@ -720,10 +704,10 @@ public class DeviceService {
      * Attempts to close and reopen the serial transport after repeated poll failures.
      *
      * <p>
-     * Modbus RTU defines no session-layer reconnect mechanism. After a USB-serial adapter is
-     * physically disconnected, jSerialComm's {@link SerialPort} object becomes invalid and the
-     * only correct recovery is to discard it and open a fresh one.  This method delegates to
-     * {@link DC2DCConverter#reconnect()} which in turn calls {@link com.serial.modbus.ModbusTransport#reconnect()}.
+     * Modbus RTU defines no session-layer reconnect mechanism. After a USB-serial adapter is physically disconnected,
+     * jSerialComm's {@link SerialPort} object becomes invalid and the only correct recovery is to discard it and open a fresh
+     * one. This method delegates to {@link DC2DCConverter#reconnect()} which in turn calls
+     * {@link com.serial.modbus.ModbusTransport#reconnect()}.
      * </p>
      *
      * <p>
@@ -748,10 +732,9 @@ public class DeviceService {
      * Returns the effective maximum voltage setpoint for the current device and input voltage.
      *
      * <p>
-     * For {@link ConverterTopology#BUCK} converters the ceiling is
-     * {@code min(maxVoltage, voltageIn − BUCK_DROPOUT_V)}, because the device silently ignores
-     * setpoints above that value. For all other topologies the static {@code maxVoltage} limit
-     * is returned unchanged.
+     * For {@link ConverterTopology#BUCK} converters the ceiling is {@code min(maxVoltage, voltageIn − BUCK_DROPOUT_V)}, because
+     * the device silently ignores setpoints above that value. For all other topologies the static {@code maxVoltage} limit is
+     * returned unchanged.
      * </p>
      *
      * @return effective maximum voltage in volts
@@ -764,24 +747,21 @@ public class DeviceService {
         } else {
             base = state.getMaxVoltage();
         }
-        return (state.getConfigMaxVoltage() > 0)
-                ? Math.min(base, state.getConfigMaxVoltage())
-                : base;
+        return (state.getConfigMaxVoltage() > 0) ? Math.min(base, state.getConfigMaxVoltage()) : base;
     }
 
     /**
      * Returns the effective maximum current setpoint, taking the operator cap into account.
      *
      * <p>
-     * When {@code serialcontroller.max.setcurrent} is configured and is lower than the device's
-     * physical {@code maxCurrent}, the operator cap governs.  Otherwise the device limit is used.
+     * When {@code serialcontroller.max.setcurrent} is configured and is lower than the device's physical {@code maxCurrent},
+     * the operator cap governs. Otherwise the device limit is used.
      * </p>
      *
      * @return effective maximum current in amperes
      */
     private double effectiveMaxCurrent() {
-        return (state.getConfigMaxCurrent() > 0)
-                ? Math.min(state.getMaxCurrent(), state.getConfigMaxCurrent())
+        return (state.getConfigMaxCurrent() > 0) ? Math.min(state.getMaxCurrent(), state.getConfigMaxCurrent())
                 : state.getMaxCurrent();
     }
 
@@ -789,9 +769,8 @@ public class DeviceService {
      * Parses the {@code device.topology} property into a {@link ConverterTopology} enum constant.
      *
      * <p>
-     * If the property is absent or its value does not match any constant name (case-insensitive),
-     * a warning is logged and {@link ConverterTopology#BUCK_BOOST} is returned as the safe default
-     * (no restriction).
+     * If the property is absent or its value does not match any constant name (case-insensitive), a warning is logged and
+     * {@link ConverterTopology#BUCK_BOOST} is returned as the safe default (no restriction).
      * </p>
      *
      * @param props the loaded device properties
@@ -826,5 +805,5 @@ public class DeviceService {
                     String.format("%s out of range: %.3f (min=%.3f, max=%.3f)", name, value, min, max));
         }
     }
-    
+
 }

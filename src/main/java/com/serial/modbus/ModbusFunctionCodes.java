@@ -87,7 +87,6 @@ public final class ModbusFunctionCodes {
      */
     public static final byte WRITE_SINGLE_REGISTER = 0x06;
 
-    
     /**
      * Modbus function code for writing multiple registers.
      *
@@ -100,5 +99,5 @@ public final class ModbusFunctionCodes {
      * </p>
      */
     public static final byte WRITE_MULTIPLE_REGISTERS = 0x10;
-    
+
 }

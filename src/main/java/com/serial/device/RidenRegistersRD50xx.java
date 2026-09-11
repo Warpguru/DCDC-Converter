@@ -11,8 +11,8 @@ import com.serial.devices.Sinilink;
  * </p>
  *
  * <p>
- * The DPS50xx register layout is distinct from both the {@link Sinilink} and the RD60xx series.
- * Notable differences from the RD60xx:
+ * The DPS50xx register layout is distinct from both the {@link Sinilink} and the RD60xx series. Notable differences from the
+ * RD60xx:
  * </p>
  *
  * <ul>
@@ -21,8 +21,8 @@ import com.serial.devices.Sinilink;
  * <li>Register 0x000C is {@code VERSON} (firmware version) - not an energy counter.</li>
  * <li>Register 0x000A is {@code B_LED} (backlight level, 0–5) - not a preset selector.</li>
  * <li>Register 0x0023 is {@code EXTRACT_M} (data-set recall, write 0–9).</li>
- * <li>Energy counters, temperature registers, and serial-number registers present in the
- *     RD60xx do <strong>not</strong> exist in the DPS50xx register map.</li>
+ * <li>Energy counters, temperature registers, and serial-number registers present in the RD60xx do <strong>not</strong> exist
+ * in the DPS50xx register map.</li>
  * </ul>
  *
  * <p>
@@ -32,7 +32,7 @@ import com.serial.devices.Sinilink;
  * <ul>
  * <li>Voltage: raw / 100 = volts</li>
  * <li>Current: raw / 100 = amperes</li>
- * <li>Power:   raw / 100 = watts</li>
+ * <li>Power: raw / 100 = watts</li>
  * </ul>
  */
 public final class RidenRegistersRD50xx {
@@ -95,8 +95,10 @@ public final class RidenRegistersRD50xx {
     /**
      * VERSON - Firmware version. R.
      *
-     * <p>Raw register value / 10.0 = firmware version (e.g. {@code 17} = v1.7).
-     * Several DPS5020 factory batches return {@code 0} - this is a known hardware limitation.</p>
+     * <p>
+     * Raw register value / 10.0 = firmware version (e.g. {@code 17} = v1.7). Several DPS5020 factory batches return {@code 0} -
+     * this is a known hardware limitation.
+     * </p>
      */
     public static final int REG_FIRMWARE = 0x000C;
 
@@ -107,8 +109,9 @@ public final class RidenRegistersRD50xx {
     /**
      * EXTRACT_M - Data-set recall. W.
      *
-     * <p>Writing a value 0–9 recalls the corresponding preset data set (M0–M9) into
-     * the active working registers.</p>
+     * <p>
+     * Writing a value 0–9 recalls the corresponding preset data set (M0–M9) into the active working registers.
+     * </p>
      */
     public static final int REG_EXTRACT_M = 0x0023;
 

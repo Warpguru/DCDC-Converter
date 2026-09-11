@@ -6,8 +6,8 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.serial.device.DeviceRegister;
-import com.serial.device.ModbusDevice;
+import com.serial.device.base.DeviceRegister;
+import com.serial.device.base.ModbusDevice;
 import com.serial.device.SinilinkRegisters;
 import com.serial.devices.ifc.DC2DCConverter;
 import com.serial.modbus.ModbusConstants;
@@ -55,42 +55,50 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
     public static final DeviceRegister TEMP_CELSIUS = new DeviceRegister("Internal temperature Celsius", "°C",
             SinilinkRegisters.REG_TEMPERATURE_INTERNAL, 10);
 
-    public static final DeviceRegister LOCK = new DeviceRegister("Keypad Lock", null,
-            SinilinkRegisters.REG_KEYPAD_LOCK);
+    public static final DeviceRegister LOCK = new DeviceRegister("Keypad Lock", null, SinilinkRegisters.REG_KEYPAD_LOCK);
 
     // -------------------------------------------------------------------------
-    // Poll cache — populated by pollAll(), returned by all getters
+    // Poll cache - populated by pollAll(), returned by all getters
     // Block: 0x0000–0x0012 (19 registers), see bulk-read-plan.md offset map
     // -------------------------------------------------------------------------
 
+    // @formatter:off
     private volatile double cacheVoltageSet;        // offset  0 VSET      ÷100
     private volatile double cacheCurrentSet;        // offset  1 ISET      ÷1000
     private volatile double cacheVoltageOut;        // offset  2 VOUT      ÷100
     private volatile double cacheCurrentOut;        // offset  3 IOUT      ÷1000
     private volatile double cachePowerOut;          // offset  4 POUT      ÷100
     private volatile double cacheVoltageIn;         // offset  5 VIN       ÷100
+    @SuppressWarnings("unused")
     private volatile int    cacheAhLow;             // offset  6 AH_LOW    raw
+    @SuppressWarnings("unused")
     private volatile int    cacheAhHigh;            // offset  7 AH_HIGH   raw
+    @SuppressWarnings("unused")
     private volatile int    cacheWhLow;             // offset  8 WH_LOW    raw
+    @SuppressWarnings("unused")
     private volatile int    cacheWhHigh;            // offset  9 WH_HIGH   raw
+    @SuppressWarnings("unused")
     private volatile int    cacheOutHours;          // offset 10 OUT_HOURS raw
+    @SuppressWarnings("unused")
     private volatile int    cacheOutMinutes;        // offset 11 OUT_MIN   raw
+    @SuppressWarnings("unused")
     private volatile int    cacheOutSeconds;        // offset 12 OUT_SEC   raw
     private volatile double cacheTemperature;       // offset 13 TEMP      ÷10
+    @SuppressWarnings("unused")
     private volatile double cacheTemperatureExt;    // offset 14 TEMP_EXT  ÷10
     private volatile int    cacheLock;              // offset 15 LOCK      raw
     private volatile int    cacheProtection;        // offset 16 PROTECTION raw
     private volatile int    cacheMode;              // offset 17 MODE      raw
     private volatile int    cacheOutput;            // offset 18 OUTPUT    raw
+    // @formatter:on
 
     /**
      * Lookup map from the raw model ID returned by Register 0x0016 to the retail model name.
      *
      * <p>
-     * Per {@code doc/Sinilink.md}, Register 0x0016 returns a 16-bit integer whose value is the
-     * hex model code read as a decimal integer. For example, the XY6008 has hex model code
-     * {@code 0x6008}, which is decimal {@code 24584}. Validating against this map avoids false
-     * positives when probing non-Sinilink hardware where register 0x0016 holds unrelated data.
+     * Per {@code doc/Sinilink.md}, Register 0x0016 returns a 16-bit integer whose value is the hex model code read as a decimal
+     * integer. For example, the XY6008 has hex model code {@code 0x6008}, which is decimal {@code 24584}. Validating against
+     * this map avoids false positives when probing non-Sinilink hardware where register 0x0016 holds unrelated data.
      * </p>
      *
      * <ul>
@@ -98,18 +106,18 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
      * <li>{@code 0x6008} = 24584 → {@code "XY6008"}</li>
      * <li>{@code 0x6100} = 24832 → {@code "XY6020L"}</li>
      * <li>{@code 0x3607} = 13831 → {@code "XY3607F"}</li>
-     * <li>{@code 0x1805} =  6149 → {@code "SK180S"}</li>
-     * <li>{@code 0x2209} =  8713 → {@code "SK220S"}</li>
+     * <li>{@code 0x1805} = 6149 → {@code "SK180S"}</li>
+     * <li>{@code 0x2209} = 8713 → {@code "SK220S"}</li>
      * </ul>
      *
      * <p>
-     * <strong>Note:</strong> These are the exact hex IDs documented. Whether real hardware may
-     * return a variant with a revision digit (e.g. {@code 0x6009} for a later XY6008 revision)
-     * is unknown and must be confirmed by live-device observation (Sub-Task 3,
-     * {@code detection-gaps-plan.md}). The TODO log promotions in {@link #verifyDevicePresent(List)}
-     * are in place for that purpose.
+     * <strong>Note:</strong> These are the exact hex IDs documented. Whether real hardware may return a variant with a revision
+     * digit (e.g. {@code 0x6009} for a later XY6008 revision) is unknown and must be confirmed by live-device observation
+     * (Sub-Task 3, {@code detection-gaps-plan.md}). The TODO log promotions in {@link #verifyDevicePresent(List)} are in place
+     * for that purpose.
      * </p>
      */
+    // @formatter:off
     private static final Map<Integer, String> KNOWN_MODELS = Map.of(
             20488, "XY5008",   // 0x5008
             24584, "XY6008",   // 0x6008
@@ -118,6 +126,7 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
              6149, "SK180S",   // 0x1805
              8713, "SK220S"    // 0x2209
     );
+    // @formatter:on
 
     /**
      * Constructor.
@@ -142,8 +151,8 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
      * Verify that {@code Sinilink} is present probing only the specified baud rates.
      *
      * <p>
-     * Probes the hardware model register (0x0016) first and validates it against {@link #KNOWN_MODELS}.
-     * If matched, reads the firmware version (0x0017) to complete detection.
+     * Probes the hardware model register (0x0016) first and validates it against {@link #KNOWN_MODELS}. If matched, reads the
+     * firmware version (0x0017) to complete detection.
      * </p>
      *
      * @param bauds list of baud rates to probe in order
@@ -198,44 +207,49 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
     }
 
     /**
-     * Reads the full register block ({@code 0x0000–0x0012}, 19 registers) in a single Modbus
-     * {@code 0x03} frame and populates all poll-cache fields.
+     * Reads the full register block ({@code 0x0000–0x0012}, 19 registers) in a single Modbus {@code 0x03} frame and populates
+     * all poll-cache fields.
      *
-     * <p>Offset map (address − {@link SinilinkRegisters#REG_VSET}):</p>
+     * <p>
+     * Offset map (address − {@link SinilinkRegisters#REG_VSET}):
+     * </p>
+     * 
      * <pre>
-     *  [0]  VSET   [1]  ISET   [2]  VOUT   [3]  IOUT   [4]  POUT   [5]  VIN
-     *  [6]  AH_LOW [7]  AH_HIGH [8]  WH_LOW [9]  WH_HIGH [10] OUT_H [11] OUT_M
-     * [12]  OUT_S  [13] TEMP   [14] TEMP_EXT [15] LOCK  [16] PROTECT [17] MODE
+     *  [0]  VSET   [1]  ISET    [2]  VOUT     [3]  IOUT    [4]  POUT   [5]  VIN
+     *  [6]  AH_LOW [7]  AH_HIGH [8]  WH_LOW   [9]  WH_HIGH [10] OUT_H  [11] OUT_M
+     * [12]  OUT_S  [13] TEMP    [14] TEMP_EXT [15] LOCK   [16] PROTECT [17] MODE
      * [18]  OUTPUT
      * </pre>
      *
-     * <p>Scaling is delegated to the existing {@link DeviceRegister#decode(int)} method on each
-     * constant, so no scale factors are hardcoded here.</p>
+     * <p>
+     * Scaling is delegated to the existing {@link DeviceRegister#decode(int)} method on each constant, so no scale factors are
+     * hardcoded here.
+     * </p>
      *
      * @throws Exception if the Modbus read fails
      */
     @Override
     public void pollAll() throws Exception {
         final int[] r = readBlock(SinilinkRegisters.REG_VSET, 19);
-        cacheVoltageSet     = VSET.decode(r[0]);
-        cacheCurrentSet     = ISET.decode(r[1]);
-        cacheVoltageOut     = VOUT.decode(r[2]);
-        cacheCurrentOut     = IOUT.decode(r[3]);
-        cachePowerOut       = POUT.decode(r[4]);
-        cacheVoltageIn      = VIN.decode(r[5]);
-        cacheAhLow          = r[6];
-        cacheAhHigh         = r[7];
-        cacheWhLow          = r[8];
-        cacheWhHigh         = r[9];
-        cacheOutHours       = r[10];
-        cacheOutMinutes     = r[11];
-        cacheOutSeconds     = r[12];
-        cacheTemperature    = TEMP_CELSIUS.decode(r[13]);
+        cacheVoltageSet = VSET.decode(r[0]);
+        cacheCurrentSet = ISET.decode(r[1]);
+        cacheVoltageOut = VOUT.decode(r[2]);
+        cacheCurrentOut = IOUT.decode(r[3]);
+        cachePowerOut = POUT.decode(r[4]);
+        cacheVoltageIn = VIN.decode(r[5]);
+        cacheAhLow = r[6];
+        cacheAhHigh = r[7];
+        cacheWhLow = r[8];
+        cacheWhHigh = r[9];
+        cacheOutHours = r[10];
+        cacheOutMinutes = r[11];
+        cacheOutSeconds = r[12];
+        cacheTemperature = TEMP_CELSIUS.decode(r[13]);
         cacheTemperatureExt = TEMP_CELSIUS.decode(r[14]); // same scale as internal temp
-        cacheLock           = r[15];
-        cacheProtection     = r[16];
-        cacheMode           = r[17];
-        cacheOutput         = r[18];
+        cacheLock = r[15];
+        cacheProtection = r[16];
+        cacheMode = r[17];
+        cacheOutput = r[18];
     }
 
     @Override

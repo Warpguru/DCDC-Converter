@@ -6,8 +6,8 @@ import com.serial.devices.Sinilink;
  * Register map for the newer {@code RidenRD60xx} programmable DC power supply (e.g. {@code RD6030}.
  *
  * <p>
- * The RidenRD60xx exposes a larger {@code Modbus} register map than the {@link Sinilink}. It provides additional information such as serial numbers,
- * energy counters, CV/CC state, keypad lock, and battery mode registers.
+ * The RidenRD60xx exposes a larger {@code Modbus} register map than the {@link Sinilink}. It provides additional information
+ * such as serial numbers, energy counters, CV/CC state, keypad lock, and battery mode registers.
  * </p>
  *
  * <p>

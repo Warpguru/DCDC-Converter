@@ -6,8 +6,8 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.serial.device.DeviceRegister;
-import com.serial.device.ModbusDevice;
+import com.serial.device.base.DeviceRegister;
+import com.serial.device.base.ModbusDevice;
 import com.serial.device.RidenRegistersRD50xx;
 import com.serial.devices.ifc.DC2DCConverter;
 import com.serial.modbus.ModbusConstants;
@@ -17,33 +17,32 @@ import com.serial.modbus.ModbusTransport;
  * Driver for Ruideng {@code DPS/RD50xx} series programmable power supplies (e.g. {@code DPS5020}).
  *
  * <p>
- * The DPS series (DPS5005, DPS5010, DPS5020) is an older Ruideng product line that shares the same
- * electrical specs as the modern RD50xx naming but uses a different Modbus register map from the
- * RD60xx series. Key architectural differences vs. RD60xx:
+ * The DPS series (DPS5005, DPS5010, DPS5020) is an older Ruideng product line that shares the same electrical specs as the
+ * modern RD50xx naming but uses a different Modbus register map from the RD60xx series. Key architectural differences vs.
+ * RD60xx:
  * </p>
  *
  * <ul>
  * <li>Default baud rate: 9600 baud (RD60xx defaults to 115200 baud).</li>
- * <li>Model ID at Register 0x000B - 4-digit short code (e.g. {@code 5020}).
- *     On the RD60xx, Register 0x0000 is the model register; on the DPS series, Register 0x0000
- *     is {@code VSET}.</li>
- * <li>Firmware at Register 0x000C ({@code VERSON}), raw value / 100.0 = version (e.g.
- *     {@code 170} = v1.70). Several DPS5020 factory batches always return {@code 0} - this
- *     is a known hardware limitation, not a protocol or scaling bug.</li>
+ * <li>Model ID at Register 0x000B - 4-digit short code (e.g. {@code 5020}). On the RD60xx, Register 0x0000 is the model
+ * register; on the DPS series, Register 0x0000 is {@code VSET}.</li>
+ * <li>Firmware at Register 0x000C ({@code VERSON}), raw value / 100.0 = version (e.g. {@code 170} = v1.70). Several DPS5020
+ * factory batches always return {@code 0} - this is a known hardware limitation, not a protocol or scaling bug.</li>
  * </ul>
  *
  * <p>
- * Detected devices report {@code manufacturer = "Ruideng"} and use the {@code RD50xx} properties
- * files (e.g. {@code RD5020.properties}) since the electrical limits are identical between the
- * DPS and RD designations of the same model.
+ * Detected devices report {@code manufacturer = "Ruideng"} and use the {@code RD50xx} properties files (e.g.
+ * {@code RD5020.properties}) since the electrical limits are identical between the DPS and RD designations of the same model.
  * </p>
  *
- * <p>Wire connections (TTL 3.3V serial):</p>
+ * <p>
+ * Wire connections (TTL 3.3V serial):
+ * </p>
  * <ul>
- * <li>Black  → GND</li>
+ * <li>Black → GND</li>
  * <li>Yellow → TxD</li>
- * <li>Blue   → RxD</li>
- * <li>Red    → NC (5V)</li>
+ * <li>Blue → RxD</li>
+ * <li>Red → NC (5V)</li>
  * </ul>
  */
 public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
@@ -83,20 +82,20 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
      * Firmware version register.
      *
      * <p>
-     * Raw register value / 10.0 = firmware version (e.g. {@code 17} = v1.7, {@code 19} = v1.9).
-     * Several DPS5020 factory batches always return {@code 0} from this register - this is a known
-     * hardware limitation, not a scaling bug. A result of {@code 0} should be treated as "firmware
-     * version unknown" rather than "v0.0".
+     * Raw register value / 10.0 = firmware version (e.g. {@code 17} = v1.7, {@code 19} = v1.9). Several DPS5020 factory batches
+     * always return {@code 0} from this register - this is a known hardware limitation, not a scaling bug. A result of
+     * {@code 0} should be treated as "firmware version unknown" rather than "v0.0".
      * </p>
      */
     public static final DeviceRegister FIRMWARE_VERSION = new DeviceRegister("Firmware Version", null,
             RidenRegistersRD50xx.REG_FIRMWARE, 10);
 
     // -------------------------------------------------------------------------
-    // Poll cache — populated by pollAll(), returned by all getters
+    // Poll cache - populated by pollAll(), returned by all getters
     // Block: 0x0000–0x000C (13 registers), see bulk-read-plan.md offset map
     // -------------------------------------------------------------------------
 
+    // @formatter:off
     private volatile double cacheVoltageSet;    // offset  0 VSET      VSET.decode()
     private volatile double cacheCurrentSet;    // offset  1 ISET      ISET.decode()
     private volatile double cacheVoltageOut;    // offset  2 VOUT      VOUT.decode()
@@ -107,32 +106,30 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
     private volatile int    cacheProtection;    // offset  7 PROTECTION raw
     private volatile int    cacheMode;          // offset  8 MODE      raw
     private volatile int    cacheOutput;        // offset  9 OUTPUT    raw
+    @SuppressWarnings("unused")
     private volatile int    cacheBacklight;     // offset 10 BACKLIGHT raw
+    @SuppressWarnings("unused")
     private volatile int    cacheDeviceId;      // offset 11 DEVICE_ID raw
     private volatile int    cacheFirmwareRaw;   // offset 12 FIRMWARE  raw (÷10 in getter)
+    // @formatter:on
 
     /**
      * Lookup map from the 4-digit model code returned by Register 0x000B to the retail model name.
      *
      * <p>
-     * Register 0x000B is the Product Model Register in the DPS series Modbus protocol. It returns a
-     * short 4-digit integer identifying the model (e.g. {@code 5020} for the DPS5020 / RD5020).
-     * Confirmed on real hardware: a DPS5020 returns exactly {@code 5020} at 9600 baud.
+     * Register 0x000B is the Product Model Register in the DPS series Modbus protocol. It returns a short 4-digit integer
+     * identifying the model (e.g. {@code 5020} for the DPS5020 / RD5020). Confirmed on real hardware: a DPS5020 returns exactly
+     * {@code 5020} at 9600 baud.
      * </p>
      *
      * <p>
-     * The device name is stored as {@code "RD50xx"} (e.g. {@code "RD5020"}) rather than the DPS
-     * prefix so that both DPS and RD variants of the same model share the same properties file
-     * (e.g. {@code RD5020.properties}). The manufacturer field is set to {@code "Ruideng"} to
-     * correctly identify the DPS origin. Validating against this map also prevents false detection
-     * on Sinilink hardware where Register 0x000B is the output timer minutes counter.
+     * The device name is stored as {@code "RD50xx"} (e.g. {@code "RD5020"}) rather than the DPS prefix so that both DPS and RD
+     * variants of the same model share the same properties file (e.g. {@code RD5020.properties}). The manufacturer field is set
+     * to {@code "Ruideng"} to correctly identify the DPS origin. Validating against this map also prevents false detection on
+     * Sinilink hardware where Register 0x000B is the output timer minutes counter.
      * </p>
      */
-    private static final Map<Integer, String> KNOWN_DEVICE_IDS = Map.of(
-            5005, "DPS5005",
-            5010, "DPS5010",
-            5020, "DPS5020"
-    );
+    private static final Map<Integer, String> KNOWN_DEVICE_IDS = Map.of(5005, "DPS5005", 5010, "DPS5010", 5020, "DPS5020");
 
     /**
      * Constructor.
@@ -157,8 +154,8 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
      * Verify that a Ruideng DPS/RD50xx device is present probing only the specified baud rates.
      *
      * <p>
-     * Probes the model register (0x000B) first and validates against {@link #KNOWN_DEVICE_IDS}.
-     * If matched, reads the firmware version register (0x000C) to complete detection.
+     * Probes the model register (0x000B) first and validates against {@link #KNOWN_DEVICE_IDS}. If matched, reads the firmware
+     * version register (0x000C) to complete detection.
      * </p>
      *
      * @param bauds list of baud rates to probe in order
@@ -214,37 +211,41 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
     }
 
     /**
-     * Reads the full register block ({@code 0x0000–0x000C}, 13 registers) in a single Modbus
-     * {@code 0x03} frame and populates all poll-cache fields.
+     * Reads the full register block ({@code 0x0000–0x000C}, 13 registers) in a single Modbus {@code 0x03} frame and populates
+     * all poll-cache fields.
      *
-     * <p>Offset map (address − {@link RidenRegistersRD50xx#REG_VSET}):</p>
+     * <p>
+     * Offset map (address − {@link RidenRegistersRD50xx#REG_VSET}):
+     * </p>
+     * 
      * <pre>
      *  [0] VSET  [1] ISET  [2] VOUT  [3] IOUT  [4] POUT  [5] VIN
      *  [6] LOCK  [7] PROTECT [8] MODE [9] OUTPUT [10] BACKLIGHT
      * [11] DEVICE_ID  [12] FIRMWARE
      * </pre>
      *
-     * <p>Scaling is delegated to {@link DeviceRegister#decode(int)} on each constant.
-     * Temperature is not available on this device family; {@link #getTemperatureCelsius()}
-     * always returns {@code -999.0}.</p>
+     * <p>
+     * Scaling is delegated to {@link DeviceRegister#decode(int)} on each constant. Temperature is not available on this device
+     * family; {@link #getTemperatureCelsius()} always returns {@code -999.0}.
+     * </p>
      *
      * @throws Exception if the Modbus read fails
      */
     @Override
     public void pollAll() throws Exception {
         final int[] r = readBlock(RidenRegistersRD50xx.REG_VSET, 13);
-        cacheVoltageSet  = VSET.decode(r[0]);
-        cacheCurrentSet  = ISET.decode(r[1]);
-        cacheVoltageOut  = VOUT.decode(r[2]);
-        cacheCurrentOut  = IOUT.decode(r[3]);
-        cachePowerOut    = POUT.decode(r[4]);
-        cacheVoltageIn   = VIN.decode(r[5]);
-        cacheLock        = r[6];
-        cacheProtection  = r[7];
-        cacheMode        = r[8];
-        cacheOutput      = r[9];
-        cacheBacklight   = r[10];
-        cacheDeviceId    = r[11];
+        cacheVoltageSet = VSET.decode(r[0]);
+        cacheCurrentSet = ISET.decode(r[1]);
+        cacheVoltageOut = VOUT.decode(r[2]);
+        cacheCurrentOut = IOUT.decode(r[3]);
+        cachePowerOut = POUT.decode(r[4]);
+        cacheVoltageIn = VIN.decode(r[5]);
+        cacheLock = r[6];
+        cacheProtection = r[7];
+        cacheMode = r[8];
+        cacheOutput = r[9];
+        cacheBacklight = r[10];
+        cacheDeviceId = r[11];
         cacheFirmwareRaw = r[12];
     }
 
@@ -324,14 +325,13 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
     }
 
     /**
-     * The DPS50xx series does not expose a temperature register in its Modbus protocol.
-     * Returns {@code -999.0} to indicate that temperature is unavailable on this device.
+     * The DPS50xx series does not expose a temperature register in its Modbus protocol. Returns {@code -999.0} to indicate that
+     * temperature is unavailable on this device.
      *
      * <p>
-     * {@code NaN} cannot be used because Jackson serialises it as a non-finite float, which is
-     * invalid JSON and would cause every WebSocket broadcast to fail. {@code -999.0} is chosen
-     * as an unambiguous sentinel: it is physically impossible for any semiconductor device
-     * (absolute zero is −273.15 °C), so it can never be a real reading.
+     * {@code NaN} cannot be used because Jackson serialises it as a non-finite float, which is invalid JSON and would cause
+     * every WebSocket broadcast to fail. {@code -999.0} is chosen as an unambiguous sentinel: it is physically impossible for
+     * any semiconductor device (absolute zero is −273.15 °C), so it can never be a real reading.
      * </p>
      *
      * @return {@code -999.0} (temperature not available)
@@ -354,7 +354,9 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
     /**
      * Returns the regulation mode from the poll cache.
      *
-     * <p>Register {@link RidenRegistersRD50xx#REG_MODE}: 0 = CV, 1 = CC.</p>
+     * <p>
+     * Register {@link RidenRegistersRD50xx#REG_MODE}: 0 = CV, 1 = CC.
+     * </p>
      *
      * @return {@code true} for CV mode, {@code false} for CC mode
      * @throws Exception if reading the register fails
@@ -367,7 +369,9 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
     /**
      * Recalls a stored data set (M0–M9) into the active working registers.
      *
-     * <p>Writes to register {@code EXTRACT_M} (0x0023). Valid values: 0–9.</p>
+     * <p>
+     * Writes to register {@code EXTRACT_M} (0x0023). Valid values: 0–9.
+     * </p>
      *
      * @param preset data-set index (0–9)
      * @throws Exception if the Modbus write fails

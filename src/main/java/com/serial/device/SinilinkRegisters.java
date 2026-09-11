@@ -33,7 +33,8 @@ import com.serial.modbus.ModbusFunctionCodes;
  * <li>Registers 0x0000/0x0001 mirror 0x0050/0x0051</li>
  * </ul>
  * 
- * @see <a href="https://www.laskakit.cz/user/related_files/xy6020l-modbus-interface.pdf">XY6020L 20A / 1200W Programmable Power Supply - Modbus Interface Documentation</href>
+ * @see <a href="https://www.laskakit.cz/user/related_files/xy6020l-modbus-interface.pdf">XY6020L 20A / 1200W Programmable Power
+ *      Supply - Modbus Interface Documentation</href>
  */
 public final class SinilinkRegisters {
 
@@ -403,7 +404,7 @@ public final class SinilinkRegisters {
      * Read/write.
      */
     public static final int REG_WIFI_MASTER = 0x0030;
-    
+
     /**
      * Wifi module - WIFI pairing status.
      * 
@@ -419,7 +420,7 @@ public final class SinilinkRegisters {
     public static final int REG_WIFI_CONFIG = 0x0031;
 
     /**
-     * Wifi module - WIFI status 
+     * Wifi module - WIFI status
      * 
      * Read/write.
      * 
@@ -433,28 +434,28 @@ public final class SinilinkRegisters {
      * </ul>
      */
     public static final int REG_WIFI_STATUS = 0x0032;
-    
+
     /**
      * Wifi module - IP address, e.g. 192.168.1.8, the first two bytes are 0xC0A8
      * 
      * Read/write.
      */
     public static final int REG_WIFI_IP_HIGH = 0x0033;
-    
+
     /**
      * Wifi module - IP address, 192.168.1.8, the last two bytes are 0x0108
      * 
      * Read/write.
      */
     public static final int REG_WIFI_IP_LOW = 0x0034;
-    
+
     /**
      * Base address of active memory (M0) - Voltage setting.
      * 
      * Read/write.
      */
     public static final int REG_MEMORY_M0_REG_VSET = 0x0050;
-    
+
     /**
      * Base address of active memory (M0) - Current setting.
      * 
@@ -468,28 +469,28 @@ public final class SinilinkRegisters {
      * Read/write.
      */
     public static final int REG_MEMORY_M0_SET_LVP = 0x0052;
-    
+
     /**
      * Base address of active memory (M0) - Overvoltage protection value.
      * 
      * Read/write.
      */
     public static final int REG_MEMORY_M0_SET_OVP = 0x0053;
-    
+
     /**
      * Base address of active memory (M0) - Overcurrent protection value.
      * 
      * Read/write.
      */
     public static final int REG_MEMORY_M0_SET_OCP = 0x0054;
-    
+
     /**
      * Base address of active memory (M0) - Over power protection value.
      * 
      * Read/write.
      */
     public static final int REG_MEMORY_M0_SET_OPP = 0x0055;
-    
+
     /**
      * Base address of active memory (M0) - Maximum output time (hours).
      * 
@@ -503,14 +504,14 @@ public final class SinilinkRegisters {
      * Read/write.
      */
     public static final int REG_MEMORY_M0_SET_OHP_MINUTES = 0x0057;
-    
+
     /**
      * Base address of active memory (M0) - Maximum output AH low 16 bits.
      * 
      * Read/write.
      */
     public static final int REG_MEMORY_M0_SET_OAH_LOW = 0x0058;
-    
+
     /**
      * Base address of active memory (M0) - Maximum output AH high 16 bits.
      * 

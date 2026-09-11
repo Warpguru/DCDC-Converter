@@ -1,5 +1,7 @@
 package com.serial.devices.ifc;
 
+import com.serial.service.DeviceService;
+
 /**
  * Common interfaces for {@code DC/DC Converter}s.
  */
@@ -11,7 +13,7 @@ public interface DC2DCConverter {
      * @return device
      */
     public abstract String getDevice();
-    
+
     /**
      * Set output voltage verified.
      * 
@@ -75,7 +77,7 @@ public interface DC2DCConverter {
      * @throws Exception
      */
     public double getInputVoltage() throws Exception;
-    
+
     /**
      * Set output state.
      * 
@@ -99,7 +101,7 @@ public interface DC2DCConverter {
      * @throws Exception
      */
     public double getTemperatureCelsius() throws Exception;
-    
+
     /**
      * Get firmware version.
      * 
@@ -115,7 +117,7 @@ public interface DC2DCConverter {
      * @throws Exception
      */
     public void setProtectionState(final boolean on) throws Exception;
-    
+
     /**
      * Get the protection state.
      *
@@ -149,30 +151,27 @@ public interface DC2DCConverter {
     public boolean isCvMode() throws Exception;
 
     /**
-     * Reads all registers needed for a full poll cycle in a single bulk Modbus frame per device,
-     * and stores the decoded values in internal cache fields.
+     * Reads all registers needed for a full poll cycle in a single bulk Modbus frame per device, and stores the decoded values
+     * in internal cache fields.
      *
      * <p>
-     * After this method returns, all getter methods ({@link #getVoltage()}, {@link #getCurrent()},
-     * {@link #getVoltageSet()}, etc.) return the freshly cached values without issuing any
-     * additional Modbus frames. This reduces the per-cycle serial round-trips from 11 individual
-     * reads to a single {@code 0x03} multi-register request per device.
+     * After this method returns, all getter methods ({@link #getVoltage()}, {@link #getCurrent()}, {@link #getVoltageSet()},
+     * etc.) return the freshly cached values without issuing any additional Modbus frames. This reduces the per-cycle serial
+     * round-trips from 11 individual reads to a single {@code 0x03} multi-register request per device.
      * </p>
      *
      * <p>
-     * <strong>Cache contract:</strong> all cache fields are zero-initialised ({@code 0} /
-     * {@code 0.0} / {@code false}) until the first successful call to this method. Getters invoked
-     * before the first successful {@code pollAll()} silently return these zero defaults — no
-     * exception is thrown. Under normal operation {@link DeviceService} calls {@code pollAll()} via
-     * {@code readInitialSetpoints()} during construction before the polling thread starts, so the
-     * cache is populated before any getter is used externally. If that initial call fails the
-     * exception is caught and logged; all state fields remain at their zero defaults until the first
-     * successful poll cycle.
+     * <strong>Cache contract:</strong> all cache fields are zero-initialised ({@code 0} / {@code 0.0} / {@code false}) until
+     * the first successful call to this method. Getters invoked before the first successful {@code pollAll()} silently return
+     * these zero defaults - no exception is thrown. Under normal operation {@link DeviceService} calls {@code pollAll()} via
+     * {@code readInitialSetpoints()} during construction before the polling thread starts, so the cache is populated before any
+     * getter is used externally. If that initial call fails the exception is caught and logged; all state fields remain at
+     * their zero defaults until the first successful poll cycle.
      * </p>
      *
      * <p>
-     * A failed bulk read throws before any cache field is written, so on failure the cache retains
-     * the values from the previous successful call — there is no partial update.
+     * A failed bulk read throws before any cache field is written, so on failure the cache retains the values from the previous
+     * successful call - there is no partial update.
      * </p>
      *
      * @throws Exception if the bulk Modbus read fails
@@ -183,8 +182,8 @@ public interface DC2DCConverter {
      * Returns the cached voltage setpoint (VSET) populated by the last {@link #pollAll()} call.
      *
      * <p>
-     * Unlike {@link #getVoltage()}, which returns the measured output voltage (VOUT), this method
-     * returns the programmed setpoint register value.
+     * Unlike {@link #getVoltage()}, which returns the measured output voltage (VOUT), this method returns the programmed
+     * setpoint register value.
      * </p>
      *
      * <p>
@@ -212,8 +211,8 @@ public interface DC2DCConverter {
      * Closes and re-opens the serial transport at the same port and baud rate.
      *
      * <p>
-     * Called after consecutive poll failures to recover from a USB-serial adapter
-     * being physically disconnected and reconnected.
+     * Called after consecutive poll failures to recover from a USB-serial adapter being physically disconnected and
+     * reconnected.
      * </p>
      *
      * @throws Exception if the transport cannot be re-opened
