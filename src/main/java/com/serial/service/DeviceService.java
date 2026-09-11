@@ -7,6 +7,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fazecast.jSerialComm.SerialPort;
+import com.serial.AppConfiguration;
 import com.serial.devices.RidenRD50xx;
 import com.serial.devices.RidenRD60xx;
 import com.serial.devices.Sinilink;
@@ -174,7 +176,8 @@ public class DeviceService {
 
     /**
      * Constructs a new {@code DeviceService}, detects the converter on the given port, loads its capability
-     * limits from a properties file, and reads the initial setpoints from the device.
+     * limits from a properties file, applies any operator-configured setpoint caps from
+     * {@link AppConfiguration}, and reads the initial setpoints from the device.
      *
      * <p>
      * Device detection order: Sinilink → RidenRD50xx → RidenRD60xx. The first driver that successfully
@@ -187,10 +190,12 @@ public class DeviceService {
      * </p>
      *
      * @param portName serial port name, e.g. {@code "COM3"} or {@code "/dev/ttyUSB0"}
+     * @param appConfiguration   application configuration; used to read optional setpoint cap properties
      */
-    public DeviceService(final String portName) {
+    public DeviceService(final String portName, final AppConfiguration appConfiguration) {
         detectDevice(portName);
         loadLimits();
+        applyConfigLimits(appConfiguration);
         readInitialSetpoints();
     }
 
@@ -310,7 +315,7 @@ public class DeviceService {
      * @throws Exception                if the Modbus write fails
      */
     public synchronized void setCurrent(final double amperes) throws Exception {
-        validateRange("Current", amperes, state.getMinCurrent(), state.getMaxCurrent());
+        validateRange("Current", amperes, state.getMinCurrent(), effectiveMaxCurrent());
         logger.info("Setting current to {} A", amperes);
         converter.setCurrent(amperes);
         state.setCurrentSet(amperes);
@@ -451,6 +456,19 @@ public class DeviceService {
      * which prevents any write operations from being accepted until limits are known.
      * </p>
      */
+    private void applyConfigLimits(final AppConfiguration config) {
+        config.getMaxSetVoltage().ifPresent(cap -> {
+            state.setConfigMaxVoltage(cap);
+            logger.info("Operator voltage cap applied: max setpoint = {} V (device max = {} V)",
+                        cap, state.getMaxVoltage());
+        });
+        config.getMaxSetCurrent().ifPresent(cap -> {
+            state.setConfigMaxCurrent(cap);
+            logger.info("Operator current cap applied: max setpoint = {} A (device max = {} A)",
+                        cap, state.getMaxCurrent());
+        });
+    }
+
     private void loadLimits() {
         if (converter == null) {
             logger.warn("No device detected - skipping limits load. All limits remain at 0.");
@@ -732,11 +750,32 @@ public class DeviceService {
      * @return effective maximum voltage in volts
      */
     private double effectiveMaxVoltage() {
+        final double base;
         if (state.getConverterTopology() == ConverterTopology.BUCK) {
             final double buckCeiling = state.getVoltageIn() - BUCK_DROPOUT_V;
-            return Math.min(state.getMaxVoltage(), buckCeiling);
+            base = Math.min(state.getMaxVoltage(), buckCeiling);
+        } else {
+            base = state.getMaxVoltage();
         }
-        return state.getMaxVoltage();
+        return (state.getConfigMaxVoltage() > 0)
+                ? Math.min(base, state.getConfigMaxVoltage())
+                : base;
+    }
+
+    /**
+     * Returns the effective maximum current setpoint, taking the operator cap into account.
+     *
+     * <p>
+     * When {@code serialcontroller.max.setcurrent} is configured and is lower than the device's
+     * physical {@code maxCurrent}, the operator cap governs.  Otherwise the device limit is used.
+     * </p>
+     *
+     * @return effective maximum current in amperes
+     */
+    private double effectiveMaxCurrent() {
+        return (state.getConfigMaxCurrent() > 0)
+                ? Math.min(state.getMaxCurrent(), state.getConfigMaxCurrent())
+                : state.getMaxCurrent();
     }
 
     /**
