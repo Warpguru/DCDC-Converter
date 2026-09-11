@@ -470,12 +470,18 @@ public class DeviceService {
         if (converter instanceof Sinilink s) {
             deviceName = s.getDevice();
             state.setManufacturer(s.getManufacturer());
+            try {
+                final int rawFw = s.getFirmwareVersion();
+                state.setFirmwareVersion(rawFw == 0 ? "" : ("v" + String.format("%.2f", Sinilink.FIRMWARE_VERSION.decode(rawFw))));
+            } catch (Exception e) {
+                logger.warn("Could not read Sinilink firmware version: {}", e.getMessage());
+            }
         } else if (converter instanceof RidenRD50xx r) {
             deviceName = r.getDevice();
             state.setManufacturer(r.getManufacturer());
             try {
                 final int rawFw = r.getFirmwareVersion();
-                state.setFirmwareVersion(rawFw == 0 ? "" : ("v" + String.format("%.1f", rawFw / 10.0)));
+                state.setFirmwareVersion(rawFw == 0 ? "" : ("v" + String.format("%.2f", RidenRD50xx.FIRMWARE_VERSION.decode(rawFw))));
             } catch (Exception e) {
                 logger.warn("Could not read RD50xx firmware version: {}", e.getMessage());
             }
@@ -484,7 +490,7 @@ public class DeviceService {
             state.setManufacturer(r.getManufacturer());
             try {
                 final int rawFw = r.getFirmwareVersion();
-                state.setFirmwareVersion(rawFw == 0 ? "" : ("v" + String.format("%.2f", rawFw / 100.0)));
+                state.setFirmwareVersion(rawFw == 0 ? "" : ("v" + String.format("%.2f", RidenRD60xx.FIRMWARE_VERSION.decode(rawFw))));
             } catch (Exception e) {
                 logger.warn("Could not read RD60xx firmware version: {}", e.getMessage());
             }
@@ -733,15 +739,26 @@ public class DeviceService {
      *
      * <p>
      * For {@link ConverterTopology#BUCK} converters the ceiling is {@code min(maxVoltage, voltageIn − BUCK_DROPOUT_V)}, because
-     * the device silently ignores setpoints above that value. For all other topologies the static {@code maxVoltage} limit is
-     * returned unchanged.
+     * the device cannot boost above its input rail and silently outputs whatever it can instead of rejecting the setpoint.
+     * This method enforces the ceiling in software so the REST and WebSocket layers reject out-of-range requests with a clear
+     * error rather than silently writing a setpoint that the hardware ignores.
+     * </p>
+     *
+     * <p>
+     * If {@code voltageIn} is 0.0 the input voltage has not yet been read (device just detected, first poll pending); in that
+     * case the buck ceiling is not applied and the static {@code maxVoltage} is used, to avoid rejecting every setpoint during
+     * the brief window before the first poll completes.
+     * </p>
+     *
+     * <p>
+     * For all other topologies the static {@code maxVoltage} limit is returned unchanged.
      * </p>
      *
      * @return effective maximum voltage in volts
      */
     private double effectiveMaxVoltage() {
         final double base;
-        if (state.getConverterTopology() == ConverterTopology.BUCK) {
+        if (state.getConverterTopology() == ConverterTopology.BUCK && state.getVoltageIn() > 0.0) {
             final double buckCeiling = state.getVoltageIn() - BUCK_DROPOUT_V;
             base = Math.min(state.getMaxVoltage(), buckCeiling);
         } else {

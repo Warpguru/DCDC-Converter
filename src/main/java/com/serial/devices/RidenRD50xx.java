@@ -36,13 +36,13 @@ import com.serial.modbus.ModbusTransport;
  * </p>
  *
  * <p>
- * Wire connections (TTL 3.3V serial):
+ * Wire connections - 4-pin TTL 3.3 V serial header (front-panel cutout or rear connector):
  * </p>
  * <ul>
- * <li>Black → GND</li>
- * <li>Yellow → TxD</li>
- * <li>Blue → RxD</li>
- * <li>Red → NC (5V)</li>
+ * <li>Pin 1 - Black  (GND) → adapter GND</li>
+ * <li>Pin 2 - Blue   (RxD) → adapter TxD  (device receives)</li>
+ * <li>Pin 3 - Yellow (TxD) → adapter RxD  (device transmits)</li>
+ * <li>Pin 4 - Red    (VCC) → <strong>NC - do not connect</strong></li>
  * </ul>
  */
 public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {

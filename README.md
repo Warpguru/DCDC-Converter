@@ -20,6 +20,55 @@ the correct driver. See [Device Detection](#device-detection) for the probing or
 
 ---
 
+## Hardware Wiring
+
+All supported devices expose a **3.3 V TTL UART** header - **not** RS-232 and **not** USB.
+You need a **USB-to-TTL serial adapter** (e.g. CP2102, CH340, FT232) operating at 3.3 V logic
+levels. Do **not** use a 5 V adapter without a level shifter; sustained 5 V on the RX pin will
+damage the device's MCU over time.
+
+The adapter's **TxD** pin must connect to the device's **RxD** pin and vice versa (cross-connect,
+as is standard for UART). GND must be common. The 5 V / 3.3 V power pins on the header are
+**not connected** - power the adapter from USB only.
+
+### Sinilink XY-series (XY5008, XY6008, XY6014, XY6020L, …)
+
+The 4-pin header is on the underside of the control board.
+
+| Device wire colour | Sinilink Signal | Pin (USB TTL Adapter) |
+|---|---|---|
+| **Black** | GND | GND |
+| **Green** | RxD (device receives) | TxD |
+| **Yellow** | TxD (device transmits) | RxD |
+| **Red** | +5 V | **NC - do not connect** |
+
+### Riden RD50xx / DPS series (DPS5005, DPS5010, DPS5020, RD5020, …)
+
+The 4-pin header is accessible through the front-panel cutout or via the rear connector.
+
+| Device wire colour | Riden Signal | Pin (USB TTL Adapter) |
+|---|---|---|
+| **Black** | GND | GND |
+| **Blue** | RxD (device receives) | TxD |
+| **Yellow** | TxD (device transmits) | RxD |
+| **Red** | +5 V | **NC - do not connect** |
+
+### Riden RD60xx series (RD6006, RD6012, RD6018, RD6020, RD6024, RD6030, …)
+
+The 4-pin header is on the back of the display board.
+
+| Device wire colour | Riden Signal | Pin (USB TTL Adapter) |
+|---|---|---|
+| **Black** | GND | GND |
+| **White** | RxD (device receives) | TxD |
+| **Green** | TxD (device transmits) | RxD |
+| **Red** | +5 V | **NC - do not connect** |
+
+> **Note:** Wire colours can vary between manufacturing batches. If in doubt, verify with a
+> multimeter: the TxD line idles **high** (~3.3 V) when no data is being transmitted.
+
+---
+
 ## Prerequisites
 
 - **JDK 21** or later
@@ -34,14 +83,14 @@ mvn clean source:jar install
 ```
 
 This compiles the project, attaches a sources JAR, and produces a self-contained fat JAR at
-`target/SerialController.jar` containing all runtime dependencies.
+`target/SerialController-x.y.z.jar` containing all runtime dependencies.
 
 ---
 
 ## Run
 
 ```bash
-java -jar target/SerialController.jar <port> [config-file]
+java -jar target/SerialController-x.y.z.jar <port> [config-file]
 ```
 
 | Argument | Required | Description |
@@ -55,13 +104,13 @@ Invoking the JAR **without arguments** prints all serial ports found on the syst
 shows the usage message - useful when you are unsure of the port name:
 
 ```
-Serial Controller - Control Riden/Ruideng and Sinilink DC/DC converters v1.0.0
+Serial Controller - Control Riden/Ruideng and Sinilink DC/DC converters vx.y.z
 
                   (C) by Roman Stangl 09, 2026 (Roman.Stangl@gmx.net)
                   http://warpguru.bplaced.net/
 
 Usage:
-  java -jar SerialController.jar <port> [config-file]
+  java -jar SerialController-x.y.z.jar <port> [config-file]
 Where:
   <port>        Serial port name, e.g. COM3 or /dev/ttyUSB0
   [config-file] Optional: fully-qualified path to a properties file.
@@ -85,7 +134,7 @@ No serial ports found on this system.
 ### Normal startup
 
 ```bash
-java -jar target/SerialController.jar COM3
+java -jar target/SerialController-x.y.z.jar COM3
 ```
 
 The application starts an HTTP + WebSocket server on `localhost:8000` (configurable), detects
@@ -276,7 +325,7 @@ sequenceDiagram
     participant HW as Serial port
 
     Browser->>Javalin: TCP connect → WS upgrade
-    Javalin->>WS: onConnect — add to client set
+    Javalin->>WS: onConnect - add to client set
 
     loop Every 1 s - ws-broadcaster thread
         DS->>DS: poll converter registers
@@ -291,7 +340,7 @@ sequenceDiagram
     DS->>HW: write Modbus register
 
     Browser->>Javalin: TCP close
-    Javalin->>WS: onClose — remove from client set
+    Javalin->>WS: onClose - remove from client set
 ```
 
 ### Server → client (push, every 1 s)
@@ -301,7 +350,7 @@ it to every entry in the connected-client set. A failed send removes that client
 immediately.
 
 All fields listed in [`GET /api/state`](#get-apistate--converterstate-fields) are present in
-every message — the browser updates only those it needs.
+every message - the browser updates only those it needs.
 
 **Setpoint anti-flicker guard:** When the browser sends a `setVoltage` or `setCurrent` command
 it sets a local `pendingUntil` timestamp (2 s). Incoming broadcasts do not update the slider or
@@ -315,8 +364,8 @@ single message.
 
 | Key | Type | Description |
 |---|---|---|
-| `setVoltage` | `number` | Output voltage setpoint (V) — validated against device limits |
-| `setCurrent` | `number` | Output current setpoint (A) — validated against device limits |
+| `setVoltage` | `number` | Output voltage setpoint (V) - validated against device limits |
+| `setCurrent` | `number` | Output current setpoint (A) - validated against device limits |
 | `setOutput` | `boolean` | `true` = enable output, `false` = disable |
 | `setKeypad` | `boolean` | `true` = lock keypad, `false` = unlock |
 
@@ -365,14 +414,14 @@ next reconnect through the same back-off path.
 When the SerialController process is **stopped** (Ctrl+C or `POST /api/exit`) and then
 **restarted**, the following happens automatically:
 
-1. **Server stop** — Javalin closes all open WebSocket connections. The browser's `onclose`
+1. **Server stop** - Javalin closes all open WebSocket connections. The browser's `onclose`
    fires, controls are disabled, and the first reconnect attempt is scheduled after 1 s.
-2. **Server down** — Each retry attempt fails (connection refused). The back-off delay grows up
+2. **Server down** - Each retry attempt fails (connection refused). The back-off delay grows up
    to 30 s between attempts. The browser keeps retrying indefinitely.
-3. **Server restart** — As soon as `java -jar target/SerialController.jar <port>` is run again,
+3. **Server restart** - As soon as `java -jar target/SerialController-x.y.z.jar <port>` is run again,
    the next retry attempt succeeds. `onopen` fires: the delay resets to 1 s, controls are
    re-enabled, and the full state snapshot arrives within 1 s from the first broadcast.
-4. **State resync** — The first broadcast message from the restarted server carries
+4. **State resync** - The first broadcast message from the restarted server carries
    `deviceOnline`, `deviceName`, `manufacturer`, `firmwareVersion`, device limits, setpoints,
    and all measured values. The browser reapplies slider limits, updates the page title, and
    restores the UI to the current converter state without any manual refresh.

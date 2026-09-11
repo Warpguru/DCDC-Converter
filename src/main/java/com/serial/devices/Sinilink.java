@@ -14,13 +14,17 @@ import com.serial.modbus.ModbusConstants;
 import com.serial.modbus.ModbusTransport;
 
 /**
- * {@code Sinilink} (e.g. {@code XY6008}) {@code Modbus} to {@code TTL} 3.3V {@code serial} connection.
- * 
+ * Driver for Sinilink XY-series programmable DC power supplies (e.g. {@code XY5008}, {@code XY6008}, {@code XY6014},
+ * {@code XY6020L}).
+ *
+ * <p>
+ * Wire connections - 4-pin TTL 3.3 V serial header on the underside of the control board:
+ * </p>
  * <ul>
- * <li>Sinilink Black: → Gnd
- * <li>Sinilink Green: → TxD
- * <li>Sinilink Yellow: → RxD
- * <li>Sinilink Red: → NC (5V)
+ * <li>Pin 1 - Black  (GND) → adapter GND</li>
+ * <li>Pin 2 - Green  (RxD) → adapter TxD  (device receives)</li>
+ * <li>Pin 3 - Yellow (TxD) → adapter RxD  (device transmits)</li>
+ * <li>Pin 4 - Red    (VCC) → <strong>NC - do not connect</strong></li>
  * </ul>
  */
 public class Sinilink extends ModbusDevice implements DC2DCConverter {
@@ -40,11 +44,11 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
     public static final DeviceRegister POUT = new DeviceRegister("Output Power", "W", SinilinkRegisters.REG_POUT, 100);
 
     public static final DeviceRegister FIRMWARE_VERSION = new DeviceRegister("Firmware Version", null,
-            SinilinkRegisters.REG_FIRMWARE);
+            SinilinkRegisters.REG_FIRMWARE, 100);
 
     public static final DeviceRegister MODEL_VERSION = new DeviceRegister("Model Version", null, SinilinkRegisters.REG_MODEL);
 
-    public static final DeviceRegister VIN = new DeviceRegister("Voltage Input", "V", SinilinkRegisters.REG_VIN);
+    public static final DeviceRegister VIN = new DeviceRegister("Voltage Input", "V", SinilinkRegisters.REG_VIN, 100);
 
     public static final DeviceRegister OUTPUT_ENABLE = new DeviceRegister("Output Enable", null,
             SinilinkRegisters.REG_OUTPUT_ENABLE);
@@ -93,38 +97,88 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
     // @formatter:on
 
     /**
-     * Lookup map from the raw model ID returned by Register 0x0016 to the retail model name.
+     * High byte of the 16-bit product model register ({@code 0x0016}) that carries the Sinilink "XY" series signature.
      *
      * <p>
-     * Per {@code doc/Sinilink.md}, Register 0x0016 returns a 16-bit integer whose value is the hex model code read as a decimal
-     * integer. For example, the XY6008 has hex model code {@code 0x6008}, which is decimal {@code 24584}. Validating against
-     * this map avoids false positives when probing non-Sinilink hardware where register 0x0016 holds unrelated data.
+     * The register is officially named "product model number" (Chan-pin Xing-hao) in Wuzhi/Sinilink factory Modbus mapping
+     * sheets, described as the unique product identification code built into the firmware. Early hardware batches returned a
+     * flat integer matching the model number (e.g. {@code 6008}). Modern unified firmware packs the ASCII character
+     * {@code 'Y'} ({@code 0x59}) as the upper byte and the motherboard hardware revision as the lower byte
+     * (e.g. {@code 0x5912} = decimal 22802, where {@code 0x12} = revision 1.8). The value {@code 0x59} is the ASCII
+     * character {@code 'Y'} - the 'Y' from the "XY" product-line prefix - and is used as the modern family gate.
+     * </p>
+     */
+    private static final int SINILINK_MODEL_HIGH_BYTE = 0x59;
+
+    /**
+     * Authoritative lookup map: exact product model register values confirmed by factory documentation.
+     *
+     * <p>
+     * Tried first in {@link #verifyDevicePresent(List)}. Contains both the legacy flat integers (earliest hardware batches)
+     * and any packed {@code 0x59xx} values that have been independently confirmed. If a match is found here no further
+     * fallback is needed.
      * </p>
      *
      * <ul>
-     * <li>{@code 0x5008} = 20488 → {@code "XY5008"}</li>
-     * <li>{@code 0x6008} = 24584 → {@code "XY6008"}</li>
-     * <li>{@code 0x6100} = 24832 → {@code "XY6020L"}</li>
-     * <li>{@code 0x3607} = 13831 → {@code "XY3607F"}</li>
-     * <li>{@code 0x1805} = 6149 → {@code "SK180S"}</li>
-     * <li>{@code 0x2209} = 8713 → {@code "SK220S"}</li>
+     * <li>Legacy (flat integer = model number as decimal):</li>
+     * <li>&nbsp;&nbsp;{@code 5008} → {@code "XY5008"}</li>
+     * <li>&nbsp;&nbsp;{@code 6008} → {@code "XY6008"}</li>
+     * <li>&nbsp;&nbsp;{@code 6014} → {@code "XY6014"}</li>
+     * <li>&nbsp;&nbsp;{@code 6020} → {@code "XY6020L"}</li>
+     * <li>&nbsp;&nbsp;{@code 3680} → {@code "XYH3680"}</li>
+     * <li>&nbsp;&nbsp;{@code 0x5008} = 20488 → {@code "XY5008"} (alternate documented encoding)</li>
+     * <li>&nbsp;&nbsp;{@code 0x6008} = 24584 → {@code "XY6008"} (alternate documented encoding)</li>
+     * <li>&nbsp;&nbsp;{@code 0x6100} = 24832 → {@code "XY6020L"}</li>
+     * <li>&nbsp;&nbsp;{@code 0x3607} = 13831 → {@code "XY3607F"}</li>
+     * <li>&nbsp;&nbsp;{@code 0x1805} = 6149 → {@code "SK180S"}</li>
+     * <li>&nbsp;&nbsp;{@code 0x2209} = 8713 → {@code "SK220S"}</li>
      * </ul>
-     *
-     * <p>
-     * <strong>Note:</strong> These are the exact hex IDs documented. Whether real hardware may return a variant with a revision
-     * digit (e.g. {@code 0x6009} for a later XY6008 revision) is unknown and must be confirmed by live-device observation
-     * (Sub-Task 3, {@code detection-gaps-plan.md}). The TODO log promotions in {@link #verifyDevicePresent(List)} are in place
-     * for that purpose.
-     * </p>
      */
     // @formatter:off
-    private static final Map<Integer, String> KNOWN_MODELS = Map.of(
-            20488, "XY5008",   // 0x5008
-            24584, "XY6008",   // 0x6008
-            24832, "XY6020L",  // 0x6100
-            13831, "XY3607F",  // 0x3607
-             6149, "SK180S",   // 0x1805
-             8713, "SK220S"    // 0x2209
+    private static final Map<Integer, String> KNOWN_MODELS = Map.ofEntries(
+            Map.entry( 5008, "XY5008"),    // legacy flat integer
+            Map.entry( 6008, "XY6008"),    // legacy flat integer
+            Map.entry( 6014, "XY6014"),    // legacy flat integer
+            Map.entry( 6020, "XY6020L"),   // legacy flat integer
+            Map.entry( 3680, "XYH3680"),   // legacy flat integer
+            Map.entry(20488, "XY5008"),    // 0x5008 alternate encoding
+            Map.entry(24584, "XY6008"),    // 0x6008 alternate encoding
+            Map.entry(24832, "XY6020L"),   // 0x6100
+            Map.entry(13831, "XY3607F"),   // 0x3607
+            Map.entry( 6149, "SK180S"),    // 0x1805
+            Map.entry( 8713, "SK220S")     // 0x2209
+    );
+    // @formatter:on
+
+    /**
+     * Community-reported lookup map: packed {@code 0x59xx} product model register values observed on real hardware.
+     *
+     * <p>
+     * <strong>NOTE - community data, not factory-confirmed.</strong> These values have been reported in open-source projects,
+     * ESPHome integrations, and raw register dumps by the hobbyist community but are not documented in any official Sinilink
+     * factory sheet. The lower byte encodes the control-board hardware revision (e.g. {@code 0x12} = revision 1.8).
+     * This map is consulted only after {@link #KNOWN_MODELS} yields no match and only when the high byte equals
+     * {@link #SINILINK_MODEL_HIGH_BYTE} ({@code 0x59}). Entries should be promoted to {@link #KNOWN_MODELS} once
+     * independently confirmed on live hardware.
+     * </p>
+     *
+     * <ul>
+     * <li>{@code 0x5908} = 22792 → {@code "XY5008"} (v0.8 variant)</li>
+     * <li>{@code 0x5912} = 22802 → {@code "XY6008"} (v1.8 layout)</li>
+     * <li>{@code 0x5914} = 22804 → {@code "XY6008"} (v2.0 layout, also reported for XY6020L)</li>
+     * <li>{@code 0x590E} = 22798 → {@code "XY6014"} (v1.4 layout)</li>
+     * <li>{@code 0x590D} = 22797 → {@code "XY6020L"} (v1.3 layout)</li>
+     * <li>{@code 0x590A} = 22794 → {@code "XYH3680"} (v1.0 layout)</li>
+     * </ul>
+     */
+    // @formatter:off
+    private static final Map<Integer, String> REPORTED_MODELS = Map.of(
+            22792, "XY5008",   // 0x5908 - v0.8 variant
+            22802, "XY6008",   // 0x5912 - v1.8 layout
+            22804, "XY6008",   // 0x5914 - v2.0 layout (also reported for XY6020L)
+            22798, "XY6014",   // 0x590E - v1.4 layout
+            22797, "XY6020L",  // 0x590D - v1.3 layout
+            22794, "XYH3680"   // 0x590A - v1.0 layout
     );
     // @formatter:on
 
@@ -151,8 +205,21 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
      * Verify that {@code Sinilink} is present probing only the specified baud rates.
      *
      * <p>
-     * Probes the hardware model register (0x0016) first and validates it against {@link #KNOWN_MODELS}. If matched, reads the
-     * firmware version (0x0017) to complete detection.
+     * Reads the product model register ({@code 0x0016}) at each baud rate and applies a three-step identification strategy:
+     * </p>
+     *
+     * <ol>
+     * <li><strong>KNOWN_MODELS exact match</strong> - factory-confirmed values (legacy flat integers such as {@code 6008},
+     *     and alternate documented hex encodings such as {@code 0x6008} = 24584). No warning is emitted.</li>
+     * <li><strong>REPORTED_MODELS fallback</strong> - only reached when the high byte equals {@code 0x59} ('Y'), indicating
+     *     a modern packed firmware encoding. These values are community-reported and not factory-confirmed; a {@code WARN}
+     *     log is emitted and the entry should be promoted to {@link #KNOWN_MODELS} once verified on live hardware.</li>
+     * <li><strong>Unknown packed value</strong> - high byte is {@code 0x59} but the word is in neither map. A {@code WARN}
+     *     is logged and detection is skipped; the device is not identified rather than guessed.</li>
+     * </ol>
+     *
+     * <p>
+     * If detection succeeds the firmware version register ({@code 0x0017}) is also read and logged.
      * </p>
      *
      * @param bauds list of baud rates to probe in order
@@ -165,15 +232,31 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
                 transport = new ModbusTransport(portName, baud);
                 logger.debug("Trying baud rate {}", baud);
 
-                // Probe model register (0x0016) against whitelist
+                // Probe product model register (0x0016) for Sinilink identity.
+                // Step 1: exact match against KNOWN_MODELS (factory-confirmed values, legacy and packed).
+                // Step 2: if high byte = 0x59 ('Y'), consult REPORTED_MODELS (community data, not factory-confirmed).
+                // Step 3: if high byte = 0x59 but still no match, log a warning and skip -- do not guess.
                 try {
-                    int modelVersion = getModelVersion();
-                    // INFO level intentional: raw ID must be visible without DEBUG mode for live-device
-                    // confirmation of whether 0x0016 returns exact hex IDs (e.g. 24584 for XY6008) or
-                    // includes a revision digit (see Sub-Task 3, detection-gaps-plan.md).
-                    // TODO: downgrade back to DEBUG once the value has been confirmed on real hardware.
-                    logger.info("Model register (0x0016) raw value at {} baud: {}", baud, modelVersion);
+                    final int modelVersion = getModelVersion();
+                    final String hex = Integer.toHexString(modelVersion).toUpperCase();
+                    logger.info("Product model register (0x0016) raw value at {} baud: {} (0x{})",
+                            baud, modelVersion, hex);
+
                     String modelName = KNOWN_MODELS.get(modelVersion);
+
+                    if (modelName == null && (modelVersion >> 8) == SINILINK_MODEL_HIGH_BYTE) {
+                        modelName = REPORTED_MODELS.get(modelVersion);
+                        if (modelName != null) {
+                            logger.warn("Product model register 0x{} matched community-reported data as {} "
+                                    + "-- not factory-confirmed; promote to KNOWN_MODELS once verified on hardware.",
+                                    hex, modelName);
+                        } else {
+                            logger.warn("Product model register 0x{} has Sinilink 'Y' high byte "
+                                    + "but is not in KNOWN_MODELS or REPORTED_MODELS -- device not identified.",
+                                    hex);
+                        }
+                    }
+
                     if (modelName != null) {
                         this.manufacturer = "Sinilink";
                         this.device = modelName;
@@ -182,10 +265,11 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
                             fw = getFirmwareVersion();
                         } catch (Exception ignored) {
                         }
-                        logger.info("Detected Sinilink {} (Model: {}, FW: {}) at {} baud.", modelName, modelVersion, fw, baud);
+                        logger.info("Detected Sinilink {} (product model: 0x{}, FW: {}) at {} baud.",
+                                modelName, hex, fw, baud);
                     }
                 } catch (Exception e) {
-                    logger.debug("Model version read failed at {} baud: {}", baud, e.getMessage());
+                    logger.debug("Product model register read failed at {} baud: {}", baud, e.getMessage());
                 }
 
                 if (!isDeviceDetected()) {
