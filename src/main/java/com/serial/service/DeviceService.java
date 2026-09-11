@@ -62,6 +62,20 @@ public class DeviceService {
     private static final int POLL_INTERVAL_MS = 1000;
 
     /**
+     * Duration in milliseconds during which the poll loop will not overwrite a setpoint in
+     * {@link ConverterState} after a user write.
+     *
+     * <p>
+     * Immediately after {@link #setVoltage} or {@link #setCurrent} writes a value to the device,
+     * the first one or two poll cycles may read back a slightly different value from the converter's
+     * register (quantisation, ADC settling, firmware latency). If that transient value were
+     * broadcast to the GUI it would cause a brief flicker. Suppressing the poll-overwrite for this
+     * window keeps {@code ConverterState} stable until the device register has settled.
+     * </p>
+     */
+    private static final long SETPOINT_SETTLE_MS = 2000L;
+
+    /**
      * Shared Jackson {@link ObjectMapper} instance.
      *
      * <p>
@@ -124,6 +138,29 @@ public class DeviceService {
      * </p>
      */
     private int consecutiveFailures;
+
+    /**
+     * {@link System#currentTimeMillis()} deadline before which the poll loop must not overwrite
+     * {@link ConverterState#setVoltageSet} with the value read back from the device.
+     *
+     * <p>
+     * Set to {@code System.currentTimeMillis() + SETPOINT_SETTLE_MS} whenever {@link #setVoltage}
+     * writes a new setpoint so that transient device-register values are not broadcast to clients
+     * during the settle window.
+     * </p>
+     */
+    private volatile long voltagePendingUntil = 0L;
+
+    /**
+     * {@link System#currentTimeMillis()} deadline before which the poll loop must not overwrite
+     * {@link ConverterState#setCurrentSet} with the value read back from the device.
+     *
+     * <p>
+     * Set to {@code System.currentTimeMillis() + SETPOINT_SETTLE_MS} whenever {@link #setCurrent}
+     * writes a new setpoint.
+     * </p>
+     */
+    private volatile long currentPendingUntil = 0L;
 
     /**
      * Number of consecutive fully-successful poll cycles since the device went Offline.
@@ -258,6 +295,7 @@ public class DeviceService {
         logger.info("Setting voltage to {} V", volts);
         converter.setVoltage(volts);
         state.setVoltageSet(volts);
+        voltagePendingUntil = System.currentTimeMillis() + SETPOINT_SETTLE_MS;
     }
 
     /**
@@ -276,6 +314,7 @@ public class DeviceService {
         logger.info("Setting current to {} A", amperes);
         converter.setCurrent(amperes);
         state.setCurrentSet(amperes);
+        currentPendingUntil = System.currentTimeMillis() + SETPOINT_SETTLE_MS;
     }
 
     /**
@@ -605,8 +644,16 @@ public class DeviceService {
             state.setKeypadLocked(converter.getKeypad());
             state.setProtectionState(converter.getProtectionState() ? 1 : 0);
             state.setCvMode(converter.isCvMode());
-            state.setVoltageSet(converter.getVoltageSet());
-            state.setCurrentSet(converter.getCurrentSet());
+            // Only update setpoints from the device when outside the post-write settle window.
+            // This prevents a transient register value from overwriting the just-written setpoint
+            // and causing a brief flicker in the GUI.
+            final long now = System.currentTimeMillis();
+            if (now >= voltagePendingUntil) {
+                state.setVoltageSet(converter.getVoltageSet());
+            }
+            if (now >= currentPendingUntil) {
+                state.setCurrentSet(converter.getCurrentSet());
+            }
 
             // Poll succeeded - update online tracking.
             consecutiveFailures = 0;

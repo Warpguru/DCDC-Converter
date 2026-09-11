@@ -116,7 +116,7 @@ public class SerialController {
         }
 
         // Initialise the service layer - detects device, loads limits, reads initial setpoints.
-        deviceService    = new DeviceService(portName);
+        deviceService    = new DeviceService(portName, config);
         webSocketService = new WebSocketService(deviceService, deviceService.getObjectMapper());
 
         final RestService restService = new RestService(deviceService, config);

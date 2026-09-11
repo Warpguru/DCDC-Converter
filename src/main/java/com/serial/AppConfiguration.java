@@ -51,6 +51,27 @@ public class AppConfiguration {
     /** Property key for the exit endpoint password. */
     private static final String KEY_ADMIN_PASSWORD = "serialcontroller.admin.password";
 
+    /**
+     * Property key for the operator-configured maximum output voltage setpoint.
+     *
+     * <p>
+     * When present, the user cannot set the output voltage above this value regardless of the
+     * converter's physical capability.  Intended to prevent accidental over-voltage on sensitive
+     * loads (e.g. LiIon cells).  The value must be a positive decimal number in volts.
+     * </p>
+     */
+    private static final String KEY_MAX_SET_VOLTAGE = "serialcontroller.max.setvoltage";
+
+    /**
+     * Property key for the operator-configured maximum output current setpoint.
+     *
+     * <p>
+     * When present, the user cannot set the output current above this value regardless of the
+     * converter's physical capability.  The value must be a positive decimal number in amperes.
+     * </p>
+     */
+    private static final String KEY_MAX_SET_CURRENT = "serialcontroller.max.setcurrent";
+
     /** Default server host when not specified in any config file. */
     public static final String DEFAULT_HOST = "localhost";
 
@@ -124,6 +145,36 @@ public class AppConfiguration {
         return props.getProperty(KEY_ADMIN_PASSWORD);
     }
 
+    /**
+     * Returns the operator-configured maximum output voltage setpoint, if specified.
+     *
+     * <p>
+     * When present and positive, the user cannot request a voltage above this value via the GUI or
+     * REST API.  When absent or unparseable, returns {@link java.util.OptionalDouble#empty()} and the
+     * converter's own physical limit governs.
+     * </p>
+     *
+     * @return the configured maximum voltage in volts, or empty if not specified
+     */
+    public java.util.OptionalDouble getMaxSetVoltage() {
+        return parsePositiveDouble(KEY_MAX_SET_VOLTAGE);
+    }
+
+    /**
+     * Returns the operator-configured maximum output current setpoint, if specified.
+     *
+     * <p>
+     * When present and positive, the user cannot request a current above this value via the GUI or
+     * REST API.  When absent or unparseable, returns {@link java.util.OptionalDouble#empty()} and the
+     * converter's own physical limit governs.
+     * </p>
+     *
+     * @return the configured maximum current in amperes, or empty if not specified
+     */
+    public java.util.OptionalDouble getMaxSetCurrent() {
+        return parsePositiveDouble(KEY_MAX_SET_CURRENT);
+    }
+
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
@@ -159,5 +210,29 @@ public class AppConfiguration {
             logger.error("Failed to load external configuration from '{}': {}", path, e.getMessage());
         }
     }
-    
+
+    /**
+     * Reads a property by key, parses it as a {@code double}, and returns it only when it is positive.
+     *
+     * @param key property key
+     * @return the parsed positive value, or empty if absent, blank, unparseable, or non-positive
+     */
+    private java.util.OptionalDouble parsePositiveDouble(final String key) {
+        final String raw = props.getProperty(key, "").trim();
+        if (raw.isEmpty()) {
+            return java.util.OptionalDouble.empty();
+        }
+        try {
+            final double v = Double.parseDouble(raw);
+            if (v > 0) {
+                return java.util.OptionalDouble.of(v);
+            }
+            logger.warn("Property '{}' value '{}' is not positive - ignoring.", key, raw);
+            return java.util.OptionalDouble.empty();
+        } catch (NumberFormatException e) {
+            logger.warn("Property '{}' value '{}' cannot be parsed as a number - ignoring.", key, raw);
+            return java.util.OptionalDouble.empty();
+        }
+    }
+
 }

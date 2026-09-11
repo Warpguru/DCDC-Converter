@@ -203,6 +203,28 @@ public class ConverterState {
      */
     private volatile double maxPower;
 
+    /**
+     * Operator-configured voltage setpoint ceiling in volts (V).
+     *
+     * <p>
+     * Set from the {@code serialcontroller.max.setvoltage} property at startup.
+     * A value of {@code 0.0} means no operator limit is configured; the device
+     * physical limit ({@link #maxVoltage}) governs.  When positive, neither the
+     * GUI nor the REST API may request a voltage above this value.
+     * </p>
+     */
+    private volatile double configMaxVoltage = 0.0;
+
+    /**
+     * Operator-configured current setpoint ceiling in amperes (A).
+     *
+     * <p>
+     * Set from the {@code serialcontroller.max.setcurrent} property at startup.
+     * A value of {@code 0.0} means no operator limit is configured.
+     * </p>
+     */
+    private volatile double configMaxCurrent = 0.0;
+
     // -------------------------------------------------------------------------
     // Getters - measured values
     // -------------------------------------------------------------------------
@@ -575,6 +597,42 @@ public class ConverterState {
      */
     void setMaxPower(final double maxPower) {
         this.maxPower = maxPower;
+    }
+
+    /**
+     * Returns the operator-configured voltage setpoint ceiling, or {@code 0.0} when not configured.
+     *
+     * @return configured max voltage in volts, or {@code 0.0}
+     */
+    public double getConfigMaxVoltage() {
+        return configMaxVoltage;
+    }
+
+    /**
+     * Sets the operator-configured voltage setpoint ceiling.  Package-private.
+     *
+     * @param configMaxVoltage max voltage in volts; {@code 0.0} means no limit
+     */
+    void setConfigMaxVoltage(final double configMaxVoltage) {
+        this.configMaxVoltage = configMaxVoltage;
+    }
+
+    /**
+     * Returns the operator-configured current setpoint ceiling, or {@code 0.0} when not configured.
+     *
+     * @return configured max current in amperes, or {@code 0.0}
+     */
+    public double getConfigMaxCurrent() {
+        return configMaxCurrent;
+    }
+
+    /**
+     * Sets the operator-configured current setpoint ceiling.  Package-private.
+     *
+     * @param configMaxCurrent max current in amperes; {@code 0.0} means no limit
+     */
+    void setConfigMaxCurrent(final double configMaxCurrent) {
+        this.configMaxCurrent = configMaxCurrent;
     }
 
     /**
