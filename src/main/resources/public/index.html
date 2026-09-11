@@ -326,8 +326,14 @@
             wsActivityTimer = setTimeout(function () { wsActivityEl.classList.remove('active'); }, 250);
         }
 
-        const MAX_LOG = 20;
-        const STEP    = 0.1;
+        const MAX_LOG        = 20;
+        const STEP           = 0.1;
+
+        /* ---- Setpoint interaction timing constants ---- */
+        const DEBOUNCE_MS    = 300;   /* trailing-edge delay before a WS write is sent */
+        const PENDING_HOLD_MS = 3000; /* hold off server broadcasts after a user write   */
+        const HOLD_DELAY_MS  = 400;   /* ms before press-and-hold auto-repeat starts     */
+        const HOLD_REPEAT_MS = 150;   /* ms between auto-repeat steps                    */
 
         /* ---- Topology constants (must match ConverterTopology enum names) ---- */
         const TOPOLOGY_BUCK       = 'BUCK';
@@ -339,30 +345,54 @@
         const currentTickCanvas = document.getElementById('currentTickCanvas');
 
         /* ---- Shared state (mirrors last received ConverterState) ---- */
-        let voltageSetting      = 0;
-        let currentSetting      = 0;
-        let outputEnabled       = false;
-        let keypadLocked        = false;
-        let limitsApplied       = false;
-        let converterTopology   = TOPOLOGY_BUCK_BOOST;  /* updated from first WS message */
-        let lastVoltageIn       = null;                 /* last received voltageIn value */
-        let staticMaxVoltage    = 60;                   /* maxVoltage from properties (never changes) */
+        let voltageSetting         = 0;
+        let currentSetting         = 0;
+        let outputEnabled          = false;
+        let keypadLocked           = false;
+        let limitsApplied          = false;
+        let converterTopology      = TOPOLOGY_BUCK_BOOST;  /* updated from first WS message */
+        let lastVoltageIn          = null;                 /* last received voltageIn value */
+        let staticMaxVoltage       = 60;                   /* maxVoltage from properties (never changes) */
+        let staticMaxCurrent       = 20;                   /* maxCurrent from properties (never changes) */
+        let configMaxVoltage       = 0;                    /* operator cap (0 = not configured) */
+        let configMaxCurrent       = 0;                    /* operator cap (0 = not configured) */
+
+        /* ---- Setpoint pending-write guard ---- */
+        /* Set to Date.now() + PENDING_HOLD_MS whenever the user changes a setpoint.     */
+        /* While Date.now() < *PendingUntil the WS broadcast is not allowed to overwrite */
+        /* the locally-displayed value, preventing transient device read-backs flipping  */
+        /* the display back to an intermediate value.                                    */
+        let voltagePendingUntil    = 0;
+        let currentPendingUntil    = 0;
+
+        /* ---- Debounce / press-and-hold timers ---- */
+        let voltageDebounceTimer   = null;
+        let currentDebounceTimer   = null;
+        let voltageRepeatTimeout   = null;
+        let currentRepeatTimeout   = null;
+        let voltageRepeatInterval  = null;
+        let currentRepeatInterval  = null;
+
+        /* ---- Slider drag flags ---- */
+        /* voltageDragging / currentDragging: true from pointerdown until the 'change' event  */
+        /* that follows pointerup has been processed. While true, updateVoltageUI /           */
+        /* updateCurrentUI must not write the slider element - that would fight the browser's */
+        /* own drag tracking. The flag is cleared inside 'change', not in 'pointerup', so    */
+        /* the change handler can use it to detect that pointerup already sent the value.    */
+        let voltageDragging        = false;
+        let currentDragging        = false;
 
         /* ---- Slider tick marks ---- */
         /**
          * Draws integer-step tick marks on a canvas overlaid behind a range slider.
-         * Ticks are drawn at every whole-unit value within [min, max].
-         * If vinLimit is a finite number within [min, max] an additional amber marker is drawn there.
-         *
-         * The canvas is sized to match its wrapper via CSS (width:100%, height:100%).
-         * Device pixel ratio is handled so marks are crisp on HiDPI screens.
          *
          * @param {HTMLCanvasElement} canvas
-         * @param {number} min   slider minimum
-         * @param {number} max   slider maximum
-         * @param {number|null} vinLimit  position of the Vin-1V marker, or null to omit
+         * @param {number} min          slider minimum
+         * @param {number} max          slider maximum (full device range)
+         * @param {number|null} vinLimit    amber Vin−1V marker position, or null
+         * @param {number|null} configLimit red operator-cap marker position, or null
          */
-        function drawTicks(canvas, min, max, vinLimit) {
+        function drawTicks(canvas, min, max, vinLimit, configLimit) {
             var wrap = canvas.parentElement;
             var dpr  = window.devicePixelRatio || 1;
             var w    = wrap.clientWidth;
@@ -380,6 +410,7 @@
             var PAD  = 10;
             var span = w - 2 * PAD;
             var mid  = h / 2;
+            var range = max - min;
 
             /* Draw the track background so it remains visible under the canvas */
             ctx.beginPath();
@@ -388,7 +419,6 @@
             ctx.fill();
 
             /* Integer tick marks */
-            var range = max - min;
             for (var v = Math.ceil(min); v <= max; v++) {
                 var x = PAD + (v - min) / range * span;
                 ctx.beginPath();
@@ -400,12 +430,25 @@
             }
 
             /* Vin − 1 V marker (amber, only for buck converters) */
-            if (vinLimit !== null && isFinite(vinLimit) && vinLimit >= min && vinLimit <= max) {
+            if (vinLimit !== null && vinLimit !== undefined && isFinite(vinLimit)
+                    && vinLimit >= min && vinLimit <= max) {
                 var xv = PAD + (vinLimit - min) / range * span;
                 ctx.beginPath();
                 ctx.moveTo(xv, mid - 9);
                 ctx.lineTo(xv, mid + 9);
                 ctx.strokeStyle = '#ffa000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            /* Operator config-cap marker (red) */
+            if (configLimit !== null && configLimit !== undefined && isFinite(configLimit)
+                    && configLimit >= min && configLimit <= max) {
+                var xc = PAD + (configLimit - min) / range * span;
+                ctx.beginPath();
+                ctx.moveTo(xc, mid - 9);
+                ctx.lineTo(xc, mid + 9);
+                ctx.strokeStyle = '#e53935';
                 ctx.lineWidth = 2;
                 ctx.stroke();
             }
@@ -419,18 +462,70 @@
             return null;
         }
 
+        /**
+         * Returns the effective voltage ceiling: tightest of buckCeiling and configMaxVoltage.
+         * Falls back to staticMaxVoltage when neither applies.
+         */
+        function effectiveVoltageMax() {
+            var ceil = buckCeiling();
+            var base = (ceil !== null) ? ceil : staticMaxVoltage;
+            return (configMaxVoltage > 0) ? Math.min(base, configMaxVoltage) : base;
+        }
+
+        /**
+         * Returns the effective current ceiling: configMaxCurrent when configured and tighter,
+         * otherwise the device hard limit.
+         */
+        function effectiveCurrentMax() {
+            return (configMaxCurrent > 0) ? Math.min(staticMaxCurrent, configMaxCurrent) : staticMaxCurrent;
+        }
+
+        /**
+         * Enforces the effective voltage ceiling on the entry field and snaps the current
+         * setpoint if it is above the new ceiling.  Called whenever Vin, topology, or
+         * configMaxVoltage changes.
+         */
+        function applyVoltageCeiling() {
+            if (!limitsApplied) { return; }
+            var effectiveMax = effectiveVoltageMax();
+            voltageEntry.max  = effectiveMax;
+            if (voltageSetting > effectiveMax) {
+                voltageSetting = +effectiveMax.toFixed(2);
+                updateVoltageUI();
+            }
+            redrawVoltageTicks();
+        }
+
+        /**
+         * Enforces the effective current ceiling on the entry field and snaps the current
+         * setpoint if it is above the new ceiling.  Called whenever configMaxCurrent changes
+         * or device limits are first applied.
+         */
+        function applyCurrentCeiling() {
+            if (!limitsApplied) { return; }
+            var effectiveMax = effectiveCurrentMax();
+            currentEntry.max = effectiveMax;
+            if (currentSetting > effectiveMax) {
+                currentSetting = +effectiveMax.toFixed(2);
+                updateCurrentUI();
+            }
+            redrawCurrentTicks();
+        }
+
         function redrawVoltageTicks() {
             var min = parseFloat(voltageSlider.min);
             var max = staticMaxVoltage;
-            var vinLimit = (converterTopology === TOPOLOGY_BUCK && lastVoltageIn !== null)
-                           ? (lastVoltageIn - 1) : null;
-            drawTicks(voltageTickCanvas, min, max, vinLimit);
+            var vinLimit    = (converterTopology === TOPOLOGY_BUCK && lastVoltageIn !== null)
+                               ? (lastVoltageIn - 1) : null;
+            var configLimit = (configMaxVoltage > 0) ? configMaxVoltage : null;
+            drawTicks(voltageTickCanvas, min, max, vinLimit, configLimit);
         }
 
         function redrawCurrentTicks() {
             var min = parseFloat(currentSlider.min);
-            var max = parseFloat(currentSlider.max);
-            drawTicks(currentTickCanvas, min, max, null);
+            var max = staticMaxCurrent;
+            var configLimit = (configMaxCurrent > 0) ? configMaxCurrent : null;
+            drawTicks(currentTickCanvas, min, max, null, configLimit);
         }
 
         /* Redraw on window resize */
@@ -467,7 +562,7 @@
 
         function updateVoltageUI() {
             voltageReadout.textContent = voltageSetting.toFixed(2);
-            voltageSlider.value = voltageSetting;
+            if (!voltageDragging) { voltageSlider.value = voltageSetting; }
             if (document.activeElement !== voltageEntry) {
                 voltageEntry.value = voltageSetting.toFixed(2);
             }
@@ -475,7 +570,7 @@
 
         function updateCurrentUI() {
             currentReadout.textContent = currentSetting.toFixed(2);
-            currentSlider.value = currentSetting;
+            if (!currentDragging) { currentSlider.value = currentSetting; }
             if (document.activeElement !== currentEntry) {
                 currentEntry.value = currentSetting.toFixed(2);
             }
@@ -518,39 +613,143 @@
             }
         }
 
+        /* Schedule a debounced voltage send - resets the timer on every call so only the
+           final value in a rapid burst (slider drag, repeated button clicks) is transmitted.
+           The pending guard is stamped HERE, immediately, so the WS broadcast cannot overwrite
+           the locally-displayed value during the debounce window. */
+        function scheduleVoltageSend() {
+            voltagePendingUntil = Date.now() + PENDING_HOLD_MS;
+            clearTimeout(voltageDebounceTimer);
+            voltageDebounceTimer = setTimeout(sendVoltage, DEBOUNCE_MS);
+        }
+
+        /* Schedule a debounced current send. */
+        function scheduleCurrentSend() {
+            currentPendingUntil = Date.now() + PENDING_HOLD_MS;
+            clearTimeout(currentDebounceTimer);
+            currentDebounceTimer = setTimeout(sendCurrent, DEBOUNCE_MS);
+        }
+
+        /* Stop voltage press-and-hold auto-repeat and send the final value once. */
+        function cancelVoltageRepeat() {
+            clearTimeout(voltageRepeatTimeout);
+            clearInterval(voltageRepeatInterval);
+            voltageRepeatTimeout  = null;
+            if (voltageRepeatInterval !== null) {
+                /* Interval was running - send the final stepped value now. */
+                voltagePendingUntil = Date.now() + PENDING_HOLD_MS;
+                sendVoltage();
+            }
+            voltageRepeatInterval = null;
+        }
+
+        /* Stop current press-and-hold auto-repeat and send the final value once. */
+        function cancelCurrentRepeat() {
+            clearTimeout(currentRepeatTimeout);
+            clearInterval(currentRepeatInterval);
+            currentRepeatTimeout  = null;
+            if (currentRepeatInterval !== null) {
+                currentPendingUntil = Date.now() + PENDING_HOLD_MS;
+                sendCurrent();
+            }
+            currentRepeatInterval = null;
+        }
+
         /* ---- Voltage controls ---- */
-        voltageSlider.addEventListener('change', function () {
+
+        /* Drag start - set flag so updateVoltageUI does not fight the browser thumb position. */
+        voltageSlider.addEventListener('pointerdown', function () {
+            voltageDragging = true;
+            voltagePendingUntil = Date.now() + PENDING_HOLD_MS;
+        });
+
+        /* Live-track slider position while dragging: update display only, never send. */
+        voltageSlider.addEventListener('input', function () {
             var v = parseFloat(voltageSlider.value);
-            var ceil = buckCeiling();
-            if (ceil !== null && v > ceil) {
+            var eMax = effectiveVoltageMax();
+            voltageSetting = (v > eMax) ? +eMax.toFixed(2) : +v.toFixed(2);
+            voltagePendingUntil = Date.now() + PENDING_HOLD_MS;
+            updateVoltageUI();
+        });
+
+        /* Release - send the final value. Keep voltageDragging=true so the 'change' event
+           that the browser fires immediately after pointerup knows not to send again. */
+        voltageSlider.addEventListener('pointerup', function () {
+            var v = parseFloat(voltageSlider.value);
+            var eMax = effectiveVoltageMax();
+            voltageSetting = (v > eMax) ? +eMax.toFixed(2) : +v.toFixed(2);
+            updateVoltageUI();
+            voltagePendingUntil = Date.now() + PENDING_HOLD_MS;
+            sendVoltage();
+            /* voltageDragging cleared in 'change' below */
+        });
+
+        /* 'change' fires after every pointer release AND after keyboard steps.
+           If voltageDragging is true, pointerup already sent - just clear the flag.
+           Otherwise (keyboard step while slider is focused) schedule a debounced send. */
+        voltageSlider.addEventListener('change', function () {
+            if (voltageDragging) {
+                voltageDragging = false;   /* end of pointer-drag cycle */
+                return;
+            }
+            var v    = parseFloat(voltageSlider.value);
+            var eMax = effectiveVoltageMax();
+            if (v > eMax) {
                 /* Snap thumb back to ceiling - do not send the over-limit value. */
-                voltageSetting = +ceil.toFixed(2);
+                voltageSetting = +eMax.toFixed(2);
                 updateVoltageUI();
             } else {
                 voltageSetting = +v.toFixed(2);
                 updateVoltageUI();
-                sendVoltage();
+                scheduleVoltageSend();
             }
-            voltageSlider.blur();
         });
+
         btnVoltDec.addEventListener('click', function () {
             voltageSetting = Math.max(parseFloat(voltageSlider.min), +(voltageSetting - STEP).toFixed(2));
-            updateVoltageUI(); sendVoltage();
+            updateVoltageUI(); scheduleVoltageSend();
         });
         btnVoltInc.addEventListener('click', function () {
-            var ceil = buckCeiling();
-            var max  = ceil !== null ? ceil : staticMaxVoltage;
-            voltageSetting = Math.min(max, +(voltageSetting + STEP).toFixed(2));
-            updateVoltageUI(); sendVoltage();
+            voltageSetting = Math.min(effectiveVoltageMax(), +(voltageSetting + STEP).toFixed(2));
+            updateVoltageUI(); scheduleVoltageSend();
         });
+
+        /* Press-and-hold auto-repeat for voltage decrement button.
+           The interval only updates the display; cancelVoltageRepeat sends the single final value. */
+        btnVoltDec.addEventListener('pointerdown', function () {
+            voltageRepeatTimeout = setTimeout(function () {
+                voltageRepeatInterval = setInterval(function () {
+                    voltageSetting = Math.max(parseFloat(voltageSlider.min), +(voltageSetting - STEP).toFixed(2));
+                    voltagePendingUntil = Date.now() + PENDING_HOLD_MS;
+                    updateVoltageUI();
+                }, HOLD_REPEAT_MS);
+            }, HOLD_DELAY_MS);
+        });
+        btnVoltDec.addEventListener('pointerup',    cancelVoltageRepeat);
+        btnVoltDec.addEventListener('pointerleave', cancelVoltageRepeat);
+
+        /* Press-and-hold auto-repeat for voltage increment button. */
+        btnVoltInc.addEventListener('pointerdown', function () {
+            voltageRepeatTimeout = setTimeout(function () {
+                voltageRepeatInterval = setInterval(function () {
+                    voltageSetting = Math.min(effectiveVoltageMax(), +(voltageSetting + STEP).toFixed(2));
+                    voltagePendingUntil = Date.now() + PENDING_HOLD_MS;
+                    updateVoltageUI();
+                }, HOLD_REPEAT_MS);
+            }, HOLD_DELAY_MS);
+        });
+        btnVoltInc.addEventListener('pointerup',    cancelVoltageRepeat);
+        btnVoltInc.addEventListener('pointerleave', cancelVoltageRepeat);
+
         voltageEntry.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') {
                 var v    = parseFloat(voltageEntry.value);
-                var ceil = buckCeiling();
-                if (!isNaN(v) && (ceil === null || v <= ceil) && v >= parseFloat(voltageSlider.min)) {
+                var eMax = effectiveVoltageMax();
+                if (!isNaN(v) && v <= eMax && v >= parseFloat(voltageSlider.min)) {
                     voltageSetting = +v.toFixed(2);
                     updateVoltageUI();
-                    sendVoltage();
+                    voltagePendingUntil = Date.now() + PENDING_HOLD_MS;
+                    sendVoltage();  /* entry field: send immediately, no debounce */
                 } else {
                     /* Invalid or over-ceiling - reset field to last accepted value. */
                     voltageEntry.value = voltageSetting.toFixed(2);
@@ -560,28 +759,96 @@
         });
 
         /* ---- Current controls ---- */
-        currentSlider.addEventListener('change', function () {
-            currentSetting = parseFloat(currentSlider.value);
-            updateCurrentUI();
-            sendCurrent();
-            currentSlider.blur();
+
+        /* Drag start. */
+        currentSlider.addEventListener('pointerdown', function () {
+            currentDragging = true;
+            currentPendingUntil = Date.now() + PENDING_HOLD_MS;
         });
+
+        /* Live-track slider position while dragging. */
+        currentSlider.addEventListener('input', function () {
+            var v    = parseFloat(currentSlider.value);
+            var eMax = effectiveCurrentMax();
+            currentSetting = (v > eMax) ? +eMax.toFixed(2) : +v.toFixed(2);
+            currentPendingUntil = Date.now() + PENDING_HOLD_MS;
+            updateCurrentUI();
+        });
+
+        /* Release - send the final value; keep currentDragging=true for the 'change' guard. */
+        currentSlider.addEventListener('pointerup', function () {
+            var v    = parseFloat(currentSlider.value);
+            var eMax = effectiveCurrentMax();
+            currentSetting = (v > eMax) ? +eMax.toFixed(2) : +v.toFixed(2);
+            updateCurrentUI();
+            currentPendingUntil = Date.now() + PENDING_HOLD_MS;
+            sendCurrent();
+            /* currentDragging cleared in 'change' below */
+        });
+
+        /* 'change' fires after pointer release and keyboard steps. */
+        currentSlider.addEventListener('change', function () {
+            if (currentDragging) {
+                currentDragging = false;   /* end of pointer-drag cycle */
+                return;
+            }
+            var v    = parseFloat(currentSlider.value);
+            var eMax = effectiveCurrentMax();
+            if (v > eMax) {
+                currentSetting = +eMax.toFixed(2);
+                updateCurrentUI();
+            } else {
+                currentSetting = +v.toFixed(2);
+                updateCurrentUI();
+                scheduleCurrentSend();
+            }
+        });
+
         btnCurrDec.addEventListener('click', function () {
             currentSetting = Math.max(parseFloat(currentSlider.min), +(currentSetting - STEP).toFixed(2));
-            updateCurrentUI(); sendCurrent();
+            updateCurrentUI(); scheduleCurrentSend();
         });
         btnCurrInc.addEventListener('click', function () {
-            currentSetting = Math.min(parseFloat(currentSlider.max), +(currentSetting + STEP).toFixed(2));
-            updateCurrentUI(); sendCurrent();
+            currentSetting = Math.min(effectiveCurrentMax(), +(currentSetting + STEP).toFixed(2));
+            updateCurrentUI(); scheduleCurrentSend();
         });
+
+        /* Press-and-hold auto-repeat for current decrement button.
+           The interval only updates the display; cancelCurrentRepeat sends the single final value. */
+        btnCurrDec.addEventListener('pointerdown', function () {
+            currentRepeatTimeout = setTimeout(function () {
+                currentRepeatInterval = setInterval(function () {
+                    currentSetting = Math.max(parseFloat(currentSlider.min), +(currentSetting - STEP).toFixed(2));
+                    currentPendingUntil = Date.now() + PENDING_HOLD_MS;
+                    updateCurrentUI();
+                }, HOLD_REPEAT_MS);
+            }, HOLD_DELAY_MS);
+        });
+        btnCurrDec.addEventListener('pointerup',    cancelCurrentRepeat);
+        btnCurrDec.addEventListener('pointerleave', cancelCurrentRepeat);
+
+        /* Press-and-hold auto-repeat for current increment button. */
+        btnCurrInc.addEventListener('pointerdown', function () {
+            currentRepeatTimeout = setTimeout(function () {
+                currentRepeatInterval = setInterval(function () {
+                    currentSetting = Math.min(effectiveCurrentMax(), +(currentSetting + STEP).toFixed(2));
+                    currentPendingUntil = Date.now() + PENDING_HOLD_MS;
+                    updateCurrentUI();
+                }, HOLD_REPEAT_MS);
+            }, HOLD_DELAY_MS);
+        });
+        btnCurrInc.addEventListener('pointerup',    cancelCurrentRepeat);
+        btnCurrInc.addEventListener('pointerleave', cancelCurrentRepeat);
+
         currentEntry.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') {
                 var v = parseFloat(currentEntry.value);
                 if (!isNaN(v)) {
-                    currentSetting = Math.min(parseFloat(currentSlider.max),
+                    currentSetting = Math.min(effectiveCurrentMax(),
                                      Math.max(parseFloat(currentSlider.min), +v.toFixed(2)));
                     updateCurrentUI();
-                    sendCurrent();
+                    currentPendingUntil = Date.now() + PENDING_HOLD_MS;
+                    sendCurrent();  /* entry field: send immediately, no debounce */
                 }
                 currentEntry.blur();
             }
@@ -655,18 +922,31 @@
                         voltageSlider.max  = d.maxVoltage;
                         voltageEntry.min   = voltageSlider.min;
                         voltageEntry.max   = voltageSlider.max;
+                        staticMaxCurrent   = d.maxCurrent  !== undefined ? d.maxCurrent  : 20;
                         currentSlider.min  = d.minCurrent  !== undefined ? d.minCurrent  : 0;
-                        currentSlider.max  = d.maxCurrent  !== undefined ? d.maxCurrent  : 20;
+                        currentSlider.max  = staticMaxCurrent;
                         currentEntry.min   = currentSlider.min;
                         currentEntry.max   = currentSlider.max;
+                        /* Apply operator caps from configMaxVoltage/Current already received */
                         limitsApplied = true;
-                        redrawVoltageTicks();
-                        redrawCurrentTicks();
+                        applyVoltageCeiling();
+                        applyCurrentCeiling();
+                    }
+
+                    /* Operator config caps - received once; update ceilings and redraw */
+                    if (d.configMaxVoltage !== undefined) {
+                        configMaxVoltage = d.configMaxVoltage;
+                        applyVoltageCeiling();
+                    }
+                    if (d.configMaxCurrent !== undefined) {
+                        configMaxCurrent = d.configMaxCurrent;
+                        applyCurrentCeiling();
                     }
 
                     /* Topology - determines whether a Vin-derived ceiling applies */
                     if (d.converterTopology !== undefined) {
                         converterTopology = d.converterTopology;
+                        applyVoltageCeiling();
                     }
 
                     /* Device identity - merge into page title */
@@ -677,22 +957,21 @@
                         document.title = d.manufacturer + ' ' + d.deviceName + fwSuffix;
                     }
 
-                    /* Vin - update amber buck-limit marker */
+                    /* Vin - update amber buck-limit marker and enforce slider ceiling */
                     if (d.voltageIn !== undefined) {
                         lastVoltageIn = d.voltageIn;
-                        if (limitsApplied) redrawVoltageTicks();
+                        applyVoltageCeiling();
                     }
 
-                    /* Setpoints - update UI only when neither the slider nor the entry field is focused */
-                    if (d.voltageSet !== undefined
-                            && document.activeElement !== voltageSlider
-                            && document.activeElement !== voltageEntry) {
+                    /* Setpoints - update UI only when no local write is pending.
+                       While voltagePendingUntil / currentPendingUntil is in the future the
+                       user has recently changed the value and the broadcast must not overwrite
+                       it, preventing the transient device read-back flipping the display. */
+                    if (d.voltageSet !== undefined && Date.now() >= voltagePendingUntil) {
                         voltageSetting = d.voltageSet;
                         updateVoltageUI();
                     }
-                    if (d.currentSet !== undefined
-                            && document.activeElement !== currentSlider
-                            && document.activeElement !== currentEntry) {
+                    if (d.currentSet !== undefined && Date.now() >= currentPendingUntil) {
                         currentSetting = d.currentSet;
                         updateCurrentUI();
                     }
