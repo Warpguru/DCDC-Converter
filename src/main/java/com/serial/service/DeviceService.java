@@ -194,9 +194,9 @@ public class DeviceService {
      */
     public DeviceService(final String portName, final AppConfiguration appConfiguration) {
         detectDevice(portName);
+        readInitialSetpoints();
         loadLimits();
         applyConfigLimits(appConfiguration);
-        readInitialSetpoints();
     }
 
     // -------------------------------------------------------------------------
@@ -571,6 +571,13 @@ public class DeviceService {
      * then reads all values — including the true voltage and current setpoints (VSET/ISET) via
      * {@link com.serial.devices.ifc.DC2DCConverter#getVoltageSet()} /
      * {@link com.serial.devices.ifc.DC2DCConverter#getCurrentSet()} — into {@link ConverterState}.
+     * </p>
+     *
+     * <p>
+     * If {@code pollAll()} throws, the exception is caught and logged at {@code WARN} level. In that
+     * case all driver cache fields and all {@link ConverterState} fields remain at their
+     * zero-initialised defaults ({@code 0} / {@code 0.0} / {@code false}) until the first
+     * successful poll cycle executed by the {@code modbus-poller} thread.
      * </p>
      */
     private void readInitialSetpoints() {

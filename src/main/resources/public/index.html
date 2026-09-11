@@ -373,6 +373,14 @@
         let voltageRepeatInterval  = null;
         let currentRepeatInterval  = null;
 
+        /* ---- Previous state for change-detection logging ---- */
+        let loggedVoltageSet    = null;   /* last voltageSet logged from server push  */
+        let loggedCurrentSet    = null;   /* last currentSet logged from server push  */
+        let loggedOutputEnabled = null;   /* last outputEnabled state logged           */
+        let loggedKeypadLocked  = null;   /* last keypadLocked state logged            */
+        let loggedProtection    = null;   /* last protectionState logged               */
+        let loggedOnline        = null;   /* last deviceOnline state logged            */
+
         /* ---- Slider drag flags ---- */
         /* voltageDragging / currentDragging: true from pointerdown until the 'change' event  */
         /* that follows pointerup has been processed. While true, updateVoltageUI /           */
@@ -601,6 +609,7 @@
             if (ws && ws.readyState === WebSocket.OPEN) {
                 flashActivity();
                 ws.send(JSON.stringify({ setVoltage: voltageSetting }));
+                loggedVoltageSet = Math.round(voltageSetting * 100) / 100;
                 addLog('⚡ Set voltage → ' + voltageSetting.toFixed(2) + ' V');
             }
         }
@@ -609,6 +618,7 @@
             if (ws && ws.readyState === WebSocket.OPEN) {
                 flashActivity();
                 ws.send(JSON.stringify({ setCurrent: currentSetting }));
+                loggedCurrentSet = Math.round(currentSetting * 100) / 100;
                 addLog('⚡ Set current → ' + currentSetting.toFixed(2) + ' A');
             }
         }
@@ -860,7 +870,8 @@
                 var next = !outputEnabled;
                 flashActivity();
                 ws.send(JSON.stringify({ setOutput: next }));
-                addLog('⚡ Set output → ' + (next ? 'ON' : 'OFF'));
+                loggedOutputEnabled = next;
+                addLog((next ? '⏽ Set output → ON' : '⏻ Set output → OFF'));
             }
         });
 
@@ -870,7 +881,8 @@
                 var next = !keypadLocked;
                 flashActivity();
                 ws.send(JSON.stringify({ setKeypad: next }));
-                addLog('⚡ Set keypad → ' + (next ? 'LOCKED' : 'UNLOCKED'));
+                loggedKeypadLocked = next;
+                addLog((next ? '🔒 Set keypad → LOCKED' : '🔓 Set keypad → UNLOCKED'));
             }
         });
 
@@ -887,7 +899,7 @@
                 statusEl.className = 'badge connected';
                 statusText.textContent = 'Connected';
                 setControlsEnabled(true);
-                addLog('Connected to ' + wsUrl);
+                addLog('⚡ Connected to ' + wsUrl);
             };
 
             ws.onmessage = function (event) {
@@ -999,7 +1011,50 @@
                         }
                     }
 
-                    addLog(event.data);
+                    /* Log meaningful state changes only - not the raw JSON broadcast */
+
+                    /* Device online / offline transitions */
+                    if (d.deviceOnline !== undefined && d.deviceOnline !== loggedOnline) {
+                        loggedOnline = d.deviceOnline;
+                        addLog(d.deviceOnline ? '✅ Device Online' : '🛑 Device Offline');
+                    }
+
+                    /* Protection trips and clears */
+                    if (d.protectionState !== undefined && d.protectionState !== loggedProtection) {
+                        var prevProtection = loggedProtection;
+                        loggedProtection = d.protectionState;
+                        if (d.protectionState !== 0) addLog('⚠️ Protection tripped: ' + protLabel(d.protectionState));
+                        else if (prevProtection !== null && prevProtection !== 0) addLog('✅ Protection cleared');
+                    }
+
+                    /* Output state changes */
+                    if (d.outputEnabled !== undefined && d.outputEnabled !== loggedOutputEnabled) {
+                        loggedOutputEnabled = d.outputEnabled;
+                        addLog(d.outputEnabled ? '⏽ Output ON' : '⏻ Output OFF');
+                    }
+
+                    /* Keypad state changes */
+                    if (d.keypadLocked !== undefined && d.keypadLocked !== loggedKeypadLocked) {
+                        loggedKeypadLocked = d.keypadLocked;
+                        addLog((d.keypadLocked ? '🔒 Keypad Locked' : '🔓 Keypad Unlocked'));
+                    }
+
+                    /* Setpoints changed externally (device keypad or REST API) -
+                       only log when no local write is pending to avoid echoing our own sends */
+                    if (d.voltageSet !== undefined && Date.now() >= voltagePendingUntil) {
+                        var vRounded = Math.round(d.voltageSet * 100) / 100;
+                        if (loggedVoltageSet === null || Math.abs(vRounded - loggedVoltageSet) >= 0.01) {
+                            loggedVoltageSet = vRounded;
+                            if (limitsApplied) addLog('↩ Voltage set → ' + vRounded.toFixed(2) + ' V (device/API)');
+                        }
+                    }
+                    if (d.currentSet !== undefined && Date.now() >= currentPendingUntil) {
+                        var aRounded = Math.round(d.currentSet * 100) / 100;
+                        if (loggedCurrentSet === null || Math.abs(aRounded - loggedCurrentSet) >= 0.01) {
+                            loggedCurrentSet = aRounded;
+                            if (limitsApplied) addLog('↩ Current set → ' + aRounded.toFixed(2) + ' A (device/API)');
+                        }
+                    }
 
                 } catch (e) {
                     addLog('Non-JSON: ' + event.data);
@@ -1010,7 +1065,7 @@
                 statusEl.className = 'badge disconnected';
                 statusText.textContent = 'Disconnected';
                 setControlsEnabled(false);
-                addLog('Disconnected - reconnecting in ' + (reconnectDelay / 1000) + 's');
+                addLog('🔌 Disconnected - reconnecting in ' + (reconnectDelay / 1000) + 's');
                 setTimeout(function () {
                     reconnectDelay = Math.min(reconnectDelay * 2, 30000);
                     connect();

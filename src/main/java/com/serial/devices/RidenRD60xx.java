@@ -385,9 +385,22 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
         return (cacheMode == 0);
     }
 
+    /**
+     * Returns the internal temperature in degrees Celsius from the poll cache.
+     *
+     * <p>
+     * The RD60xx represents temperature as a magnitude in {@link RidenRegistersRD60xx#REG_TEMP_CELSIUS}
+     * and a separate sign in {@link RidenRegistersRD60xx#REG_TEMP_SIGN_CELSIUS}
+     * ({@code 0} = positive, {@code 1} = negative). Both are populated by {@link #pollAll()};
+     * the sign is applied here before returning.
+     * </p>
+     *
+     * @return temperature in °C; negative values indicate below-zero readings
+     * @throws Exception if the poll cache has not yet been populated
+     */
     @Override
     public double getTemperatureCelsius() throws Exception {
-        return cacheTemperature;
+        return (cacheTempSignCelsius == ModbusConstants.STATE_ON) ? -cacheTemperature : cacheTemperature;
     }
 
     public int getDeviceId() throws Exception {

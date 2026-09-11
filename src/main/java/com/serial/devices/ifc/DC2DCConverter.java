@@ -159,6 +159,22 @@ public interface DC2DCConverter {
      * reads to a single {@code 0x03} multi-register request per device.
      * </p>
      *
+     * <p>
+     * <strong>Cache contract:</strong> all cache fields are zero-initialised ({@code 0} /
+     * {@code 0.0} / {@code false}) until the first successful call to this method. Getters invoked
+     * before the first successful {@code pollAll()} silently return these zero defaults — no
+     * exception is thrown. Under normal operation {@link DeviceService} calls {@code pollAll()} via
+     * {@code readInitialSetpoints()} during construction before the polling thread starts, so the
+     * cache is populated before any getter is used externally. If that initial call fails the
+     * exception is caught and logged; all state fields remain at their zero defaults until the first
+     * successful poll cycle.
+     * </p>
+     *
+     * <p>
+     * A failed bulk read throws before any cache field is written, so on failure the cache retains
+     * the values from the previous successful call — there is no partial update.
+     * </p>
+     *
      * @throws Exception if the bulk Modbus read fails
      */
     public void pollAll() throws Exception;
@@ -171,16 +187,24 @@ public interface DC2DCConverter {
      * returns the programmed setpoint register value.
      * </p>
      *
-     * @return voltage setpoint in volts
-     * @throws Exception if no poll has been performed yet and the cache is uninitialised
+     * <p>
+     * Returns {@code 0.0} if {@link #pollAll()} has not yet been called successfully.
+     * </p>
+     *
+     * @return voltage setpoint in volts, or {@code 0.0} if the cache has not been populated
+     * @throws Exception if the underlying transport throws during the call
      */
     public double getVoltageSet() throws Exception;
 
     /**
      * Returns the cached current setpoint (ISET) populated by the last {@link #pollAll()} call.
      *
-     * @return current setpoint in amperes
-     * @throws Exception if no poll has been performed yet and the cache is uninitialised
+     * <p>
+     * Returns {@code 0.0} if {@link #pollAll()} has not yet been called successfully.
+     * </p>
+     *
+     * @return current setpoint in amperes, or {@code 0.0} if the cache has not been populated
+     * @throws Exception if the underlying transport throws during the call
      */
     public double getCurrentSet() throws Exception;
 
