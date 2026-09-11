@@ -337,12 +337,12 @@ stateDiagram-v2
     [*] --> Connecting : page load / resume
 
     Connecting --> Connected : WS upgrade successful
+    Connected --> [*] : browser tab closed
     Connected --> Disconnected : server stopped / network loss / error
 
     Disconnected --> Connecting : retry after back-off delay
     Connecting --> Disconnected : connection refused
 
-    Connected --> [*] : browser tab closed
 ```
 
 | State | UI behaviour |
