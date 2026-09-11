@@ -19,33 +19,30 @@ import io.javalin.websocket.WsMessageContext;
  * Manages the WebSocket endpoint for live converter data.
  *
  * <p>
- * This service owns the connected-client set, the broadcast thread, and all WebSocket message
- * handling. It replaces the inline WebSocket code that previously lived in
- * {@code SerialController}.
+ * This service owns the connected-client set, the broadcast thread, and all WebSocket message handling. It replaces the inline
+ * WebSocket code that previously lived in {@code SerialController}.
  * </p>
  *
  * <p>
- * <strong>Push:</strong> A background thread broadcasts the full {@link ConverterState} as JSON
- * to every connected client every second. The payload is the complete state snapshot so that the
- * webpage always has current data regardless of what changed.
+ * <strong>Push:</strong> A background thread broadcasts the full {@link ConverterState} as JSON to every connected client every
+ * second. The payload is the complete state snapshot so that the webpage always has current data regardless of what changed.
  * </p>
  *
  * <p>
- * <strong>Receive:</strong> Clients may send JSON messages to adjust setpoints. The following
- * keys are recognised (unrecognised keys are silently ignored at DEBUG level):
+ * <strong>Receive:</strong> Clients may send JSON messages to adjust setpoints. The following keys are recognised (unrecognised
+ * keys are silently ignored at DEBUG level):
  * </p>
  * <ul>
- * <li>{@code setCurrent}  - {@code double} - current setpoint in amperes</li>
- * <li>{@code setVoltage}  - {@code double} - voltage setpoint in volts</li>
- * <li>{@code setOutput}   - {@code boolean} - {@code true} to enable output, {@code false} to disable</li>
- * <li>{@code setKeypad}   - {@code boolean} - {@code true} to lock keypad, {@code false} to unlock</li>
+ * <li>{@code setCurrent} - {@code double} - current setpoint in amperes</li>
+ * <li>{@code setVoltage} - {@code double} - voltage setpoint in volts</li>
+ * <li>{@code setOutput} - {@code boolean} - {@code true} to enable output, {@code false} to disable</li>
+ * <li>{@code setKeypad} - {@code boolean} - {@code true} to lock keypad, {@code false} to unlock</li>
  * </ul>
  *
  * <p>
- * <strong>Threading:</strong> The broadcast thread is the only application-owned thread in this
- * service. Write operations from incoming messages are delegated to the {@code synchronized}
- * methods on {@link DeviceService}, which serialises them with the Modbus polling thread.
- * This design maps directly to two FreeRTOS tasks on the planned ESP32 C port.
+ * <strong>Threading:</strong> The broadcast thread is the only application-owned thread in this service. Write operations from
+ * incoming messages are delegated to the {@code synchronized} methods on {@link DeviceService}, which serialises them with the
+ * Modbus polling thread. This design maps directly to two FreeRTOS tasks on the planned ESP32 C port.
  * </p>
  */
 public class WebSocketService {
@@ -87,7 +84,7 @@ public class WebSocketService {
      */
     public WebSocketService(final DeviceService deviceService, final ObjectMapper objectMapper) {
         this.deviceService = deviceService;
-        this.objectMapper  = objectMapper;
+        this.objectMapper = objectMapper;
     }
 
     // -------------------------------------------------------------------------
@@ -98,8 +95,8 @@ public class WebSocketService {
      * Starts the background broadcast thread.
      *
      * <p>
-     * Must be called after the Javalin server has started so the first broadcast fires as soon as
-     * the first WebSocket client connects.
+     * Must be called after the Javalin server has started so the first broadcast fires as soon as the first WebSocket client
+     * connects.
      * </p>
      */
     public void start() {
@@ -139,9 +136,9 @@ public class WebSocketService {
      * Called when a WebSocket client sends a message.
      *
      * <p>
-     * Parses the incoming JSON and dispatches to the appropriate {@link DeviceService} write
-     * method. Recognised keys: {@code setCurrent}, {@code setVoltage}, {@code setOutput}, {@code setKeypad}.
-     * Unrecognised keys are logged at DEBUG level and ignored.
+     * Parses the incoming JSON and dispatches to the appropriate {@link DeviceService} write method. Recognised keys:
+     * {@code setCurrent}, {@code setVoltage}, {@code setOutput}, {@code setKeypad}. Unrecognised keys are logged at DEBUG level
+     * and ignored.
      * </p>
      *
      * @param ctx the WebSocket context carrying the message
@@ -195,8 +192,8 @@ public class WebSocketService {
 
             // Log unrecognised keys at DEBUG so they are visible when debugging but do not clutter INFO logs.
             for (String key : json.keySet()) {
-                if (!key.equals(KEY_SET_CURRENT) && !key.equals(KEY_SET_VOLTAGE)
-                        && !key.equals(KEY_SET_OUTPUT) && !key.equals(KEY_SET_KEYPAD)) {
+                if (!key.equals(KEY_SET_CURRENT) && !key.equals(KEY_SET_VOLTAGE) && !key.equals(KEY_SET_OUTPUT)
+                        && !key.equals(KEY_SET_KEYPAD)) {
                     logger.debug("WebSocket message: unrecognised key '{}' - ignored.", key);
                 }
             }
@@ -220,9 +217,8 @@ public class WebSocketService {
      * Called when a WebSocket error occurs.
      *
      * <p>
-     * {@link ClosedChannelException} and {@link java.io.EOFException} are logged at DEBUG level
-     * (they are normal during server shutdown or client disconnect). All other errors are logged
-     * at WARN level.
+     * {@link ClosedChannelException} and {@link java.io.EOFException} are logged at DEBUG level (they are normal during server
+     * shutdown or client disconnect). All other errors are logged at WARN level.
      * </p>
      *
      * @param ctx the WebSocket context on which the error occurred
@@ -245,9 +241,8 @@ public class WebSocketService {
      * Main body of the broadcast thread.
      *
      * <p>
-     * Serialises the full {@link ConverterState} snapshot to JSON and sends it to every connected
-     * client every {@link #BROADCAST_INTERVAL_MS} milliseconds. Failed sends remove the client
-     * from the active set.
+     * Serialises the full {@link ConverterState} snapshot to JSON and sends it to every connected client every
+     * {@link #BROADCAST_INTERVAL_MS} milliseconds. Failed sends remove the client from the active set.
      * </p>
      */
     private void broadcastLoop() {
@@ -272,4 +267,5 @@ public class WebSocketService {
         }
         logger.info("WebSocket broadcast thread exiting.");
     }
+
 }

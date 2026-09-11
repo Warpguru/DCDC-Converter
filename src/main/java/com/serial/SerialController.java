@@ -1,5 +1,17 @@
 package com.serial;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.Filter;
+import org.apache.logging.log4j.core.Filter.Result;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.core.config.Configurator;
+import org.apache.logging.log4j.core.config.LoggerConfig;
+import org.apache.logging.log4j.core.filter.ThresholdFilter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fazecast.jSerialComm.SerialPort;
 import com.serial.service.ConverterState;
 import com.serial.service.DeviceService;
@@ -10,17 +22,6 @@ import io.javalin.Javalin;
 import io.javalin.http.staticfiles.Location;
 import io.javalin.openapi.plugin.OpenApiPlugin;
 import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
-
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.Filter;
-import org.apache.logging.log4j.core.Filter.Result;
-import org.apache.logging.log4j.core.LoggerContext;
-import org.apache.logging.log4j.core.config.Configuration;
-import org.apache.logging.log4j.core.config.LoggerConfig;
-import org.apache.logging.log4j.core.filter.ThresholdFilter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Serial Controller Application - entry point.
@@ -57,8 +58,8 @@ public class SerialController {
     private WebSocketService webSocketService;
 
     /**
-     * Monitor used to let the main thread sleep until the 600-second timeout elapses or until
-     * the {@code /api/exit} handler wakes it early by calling {@code notifyAll()}.
+     * Monitor used to park the main thread until {@code /api/exit} wakes it via
+     * {@code notifyAll()}, or the JVM shutdown hook fires on Ctrl+C / SIGTERM.
      */
     private final Object shutdownLock = new Object();
 
@@ -85,6 +86,10 @@ public class SerialController {
             logger.info("                  serialcontroller.log.level      Log level (TRACE/DEBUG/INFO/WARN/ERROR)");
             logger.info("                  serialcontroller.admin.username Username for GUI administration");
             logger.info("                  serialcontroller.admin.password Password for GUI administration");
+            // Always enumerate serial ports first so the user can identify the correct port name
+            // even when the application is invoked without arguments.
+            logger.info("");
+            listSerialPorts();
             return;
         }
         logger.info("Serial Controller started.");
@@ -97,23 +102,6 @@ public class SerialController {
 
         // Apply log level override before any further logging.
         applyLogLevel(config.getLogLevel());
-
-        // Enumerate serial ports for diagnostics.
-        logger.info("Enumerating serial ports...");
-        SerialPort[] serialPorts = SerialPort.getCommPorts();
-        if (serialPorts.length == 0) {
-            String msg = "No serial ports found on this system.";
-            logger.info(msg);
-            logger.warn(msg);
-        } else {
-            logger.info("Found {} serial port(s):", serialPorts.length);
-            for (SerialPort serialPort : serialPorts) {
-                printPortDetails(serialPort);
-            }
-            // NOTE: demoVoltages() is no longer called here - it opened its own ModbusTransport
-            // on every discovered port, which conflicts with DeviceService acquiring the transport
-            // exclusively. Removed in Iteration 5; method body cleared, signature retained @Deprecated.
-        }
 
         // Initialise the service layer - detects device, loads limits, reads initial setpoints.
         deviceService    = new DeviceService(portName, config);
@@ -156,22 +144,38 @@ public class SerialController {
 
         }).start(serverPort);
 
-        // Give the exit handler a reference to shut down the server and wake the main thread.
+        // Give the exit handler a reference to wake the main thread.
         restService.setShutdown(javalin, () -> {
             synchronized (shutdownLock) {
                 shutdownLock.notifyAll();
             }
         });
 
+        // Register a JVM shutdown hook so that Ctrl+C / SIGTERM performs a clean teardown
+        // (stops the poller, the broadcaster, and the Javalin server before the JVM exits).
+        final Thread shutdownHook = new Thread(() -> {
+            logger.info("Shutdown hook triggered - stopping services.");
+            webSocketService.stop();
+            deviceService.stop();
+            javalin.stop();
+            synchronized (shutdownLock) {
+                shutdownLock.notifyAll();
+            }
+        }, "shutdown-hook");
+        Runtime.getRuntime().addShutdownHook(shutdownHook);
+
         // Start the Modbus polling thread and the WebSocket broadcast thread.
         deviceService.start();
         webSocketService.start();
 
-        // Sleep until the 600-second timeout expires or /api/exit wakes us early.
+        // Park the main thread until /api/exit or the shutdown hook wakes it.
         synchronized (shutdownLock) {
-            shutdownLock.wait(600_000L);
+            shutdownLock.wait();
         }
 
+        // /api/exit path: the shutdown hook has not fired yet, so do teardown here
+        // and remove the hook to prevent it running a second time during JVM exit.
+        Runtime.getRuntime().removeShutdownHook(shutdownHook);
         webSocketService.stop();
         deviceService.stop();
         javalin.stop();
@@ -194,7 +198,7 @@ public class SerialController {
      *
      * @param levelStr level name from the config file, e.g. {@code "DEBUG"}; blank to skip
      */
-    private static void applyLogLevel(final String levelStr) {
+    private void applyLogLevel(final String levelStr) {
         if (levelStr == null || levelStr.isBlank()) {
             return;
         }
@@ -236,6 +240,26 @@ public class SerialController {
     }
 
     /**
+     * Enumerates all serial ports available on this system and logs their details.
+     *
+     * <p>
+     * Always called at startup - even when the application is invoked without arguments - so that
+     * the user can identify the correct port name before retrying with it.
+     * </p>
+     */
+    private void listSerialPorts() {
+        final SerialPort[] serialPorts = SerialPort.getCommPorts();
+        if (serialPorts.length == 0) {
+            logger.warn("No serial ports found on this system.");
+        } else {
+            logger.info("Found {} serial port(s):", serialPorts.length);
+            for (final SerialPort serialPort : serialPorts) {
+                printPortDetails(serialPort);
+            }
+        }
+    }
+
+    /**
      * Prints detailed information about a serial port to both console and log.
      *
      * <p>
@@ -253,15 +277,7 @@ public class SerialController {
         int    vid          = port.getVendorID();
         int    pid          = port.getProductID();
         String usbId        = (vid != 0 || pid != 0) ? String.format("0x%04X:0x%04X", vid, pid) : "N/A";
-
-        logger.info("  -----------------------------------------");
-        logger.info("  Port:         {}", name);
-        logger.info("  Description:  {}", description);
-        logger.info("  Location:     {}", location);
-        logger.info("  Manufacturer: {}", manufacturer);
-        logger.info("  Serial No:    {}", serialNumber);
-        logger.info("  USB VID:PID:  {}", usbId);
-        logger.info("Port: {} | Description: {} | Location: {} | Manufacturer: {} | Serial: {} | VID:PID: {}",
+        logger.info("  Port: {} | Description: {} | Location: {} | Manufacturer: {} | Serial: {} | VID:PID: {}",
                 name, description, location, manufacturer, serialNumber, usbId);
     }
 

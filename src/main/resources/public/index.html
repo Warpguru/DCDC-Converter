@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Serial Controller</title>
     <style>
+        /* =====================================================================
+           Styles are all inline here (no external stylesheet) so the page is a
+           single self-contained file - important for serving from an ESP32 or
+           similar embedded HTTP server with no filesystem.
+           ===================================================================== */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', system-ui, sans-serif;
@@ -288,7 +293,9 @@
     </div>
 
     <script>
-        /* ---- DOM refs ---- */
+        /* ---- DOM element references ----
+           Cached once at startup; JavaScript uses these to read/write the HTML
+           elements without repeatedly querying the document. */
         const pageTitleEl      = document.getElementById('pageTitle');
         const statusEl         = document.getElementById('status');
         const statusText       = document.getElementById('statusText');
@@ -542,7 +549,12 @@
             redrawCurrentTicks();
         });
 
-        /* ---- Protection code → label ---- */
+        /* ---- Protection code → human-readable label ----
+           Maps the integer protectionState field from ConverterState to the short
+           label shown in the Status panel.
+           0=OK (no fault), 1=OVP (over-voltage), 2=OCP (over-current),
+           3=OPP (over-power), 4=LVP (low-voltage input), 5=OAH (amp-hour limit),
+           6=OHP (over-heat/power), 7=OTP (over-temperature). */
         const PROT = { 0:'OK', 1:'OVP', 2:'OCP', 3:'OPP', 4:'LVP', 5:'OAH', 6:'OHP', 7:'OTP' };
         function protLabel(code) { return PROT[code] !== undefined ? PROT[code] : 'ERR ' + code; }
 
@@ -912,6 +924,8 @@
                     if (d.currentOut         !== undefined) currentOutEl.textContent = d.currentOut.toFixed(2);
                     if (d.powerOut           !== undefined) powerOutEl.textContent   = d.powerOut.toFixed(2);
                     if (d.voltageIn          !== undefined) voltageInEl.textContent  = d.voltageIn.toFixed(2);
+                    /* temperatureCelsius < -273: sentinel value used by drivers that have no
+                       temperature sensor (e.g. RD50xx returns -999.0); display 'N/A' instead. */
                     if (d.temperatureCelsius !== undefined) tempEl.textContent       = d.temperatureCelsius < -273 ? 'N/A' : d.temperatureCelsius.toFixed(1) + ' °C';
                     if (d.cvMode             !== undefined) cvModeEl.textContent     = d.cvMode ? 'CV' : 'CC';
 
@@ -1039,8 +1053,12 @@
                         addLog((d.keypadLocked ? '🔒 Keypad Locked' : '🔓 Keypad Unlocked'));
                     }
 
-                    /* Setpoints changed externally (device keypad or REST API) -
-                       only log when no local write is pending to avoid echoing our own sends */
+                    /* Setpoints changed externally (device keypad or REST API).
+                       Only log when no local write is pending - this avoids echoing our own
+                       sends, which arrive back as a server broadcast ~1 s later.
+                       The limitsApplied guard suppresses spurious "0.00 V" lines that would
+                       otherwise appear on the very first broadcast before device limits have
+                       been received and the sliders have been set to their real ranges. */
                     if (d.voltageSet !== undefined && Date.now() >= voltagePendingUntil) {
                         var vRounded = Math.round(d.voltageSet * 100) / 100;
                         if (loggedVoltageSet === null || Math.abs(vRounded - loggedVoltageSet) >= 0.01) {
@@ -1072,9 +1090,13 @@
                 }, reconnectDelay);
             };
 
+            /* On any WebSocket error immediately close - the onclose handler will then
+               schedule a reconnect with exponential back-off. */
             ws.onerror = function () { ws.close(); };
         }
 
+        /* Prepends a timestamped entry to the Message Log list (newest at top).
+           Trims the list to MAX_LOG entries so the DOM does not grow unbounded. */
         function addLog(msg) {
             var li = document.createElement('li');
             var ts = new Date().toLocaleTimeString();

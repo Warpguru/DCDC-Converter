@@ -4,16 +4,16 @@ package com.serial.service;
  * Thread-safe holder of all DC/DC converter state.
  *
  * <p>
- * This class is the single source of truth for all converter data. It is shared between the Modbus polling thread
- * (which updates measured values and setpoints every second) and the web-layer threads (REST handlers and WebSocket
- * message handlers, which write setpoints on user request).
+ * This class is the single source of truth for all converter data. It is shared between the Modbus polling thread (which
+ * updates measured values and setpoints every second) and the web-layer threads (REST handlers and WebSocket message handlers,
+ * which write setpoints on user request).
  * </p>
  *
  * <p>
- * <strong>Thread-safety contract:</strong> All mutable fields are declared {@code volatile}, which guarantees
- * visibility across threads for individual field reads and writes. Compound read-modify-write operations (e.g.
- * validate-then-write) are coordinated externally by {@code DeviceService} using {@code synchronized} methods,
- * which maps directly to a FreeRTOS mutex in the planned ESP32 C port.
+ * <strong>Thread-safety contract:</strong> All mutable fields are declared {@code volatile}, which guarantees visibility across
+ * threads for individual field reads and writes. Compound read-modify-write operations (e.g. validate-then-write) are
+ * coordinated externally by {@code DeviceService} using {@code synchronized} methods, which maps directly to a FreeRTOS mutex
+ * in the planned ESP32 C port.
  * </p>
  *
  * <p>
@@ -21,10 +21,10 @@ package com.serial.service;
  * </p>
  * <ol>
  * <li><strong>Measured values</strong> - updated by the polling thread from device registers every second.</li>
- * <li><strong>Setpoints</strong> - the voltage and current targets. Also polled every second so that changes
- * made on the device's physical front panel (buttons/wheel) are picked up automatically.</li>
- * <li><strong>Device limits</strong> - populated once after device detection from a per-device properties file.
- * Setters for limit fields are package-private; only {@link DeviceService} may set them.</li>
+ * <li><strong>Setpoints</strong> - the voltage and current targets. Also polled every second so that changes made on the
+ * device's physical front panel (buttons/wheel) are picked up automatically.</li>
+ * <li><strong>Device limits</strong> - populated once after device detection from a per-device properties file. Setters for
+ * limit fields are package-private; only {@link DeviceService} may set them.</li>
  * </ol>
  */
 public class ConverterState {
@@ -126,8 +126,8 @@ public class ConverterState {
      * Voltage setpoint in volts (V).
      *
      * <p>
-     * This value is both written by the user (via REST or WebSocket) and polled from the device register every
-     * second. Polling ensures that changes made on the device's physical front panel are reflected here.
+     * This value is both written by the user (via REST or WebSocket) and polled from the device register every second. Polling
+     * ensures that changes made on the device's physical front panel are reflected here.
      * </p>
      */
     private volatile double voltageSet;
@@ -136,8 +136,8 @@ public class ConverterState {
      * Current setpoint in amperes (A).
      *
      * <p>
-     * This value is both written by the user (via REST or WebSocket) and polled from the device register every
-     * second. Polling ensures that changes made on the device's physical front panel are reflected here.
+     * This value is both written by the user (via REST or WebSocket) and polled from the device register every second. Polling
+     * ensures that changes made on the device's physical front panel are reflected here.
      * </p>
      */
     private volatile double currentSet;
@@ -149,7 +149,9 @@ public class ConverterState {
     /**
      * Power-converter topology - controls whether a Vin-derived voltage ceiling is enforced.
      *
-     * <p>Defaults to {@link ConverterTopology#BUCK_BOOST} (no restriction) when the property is absent.</p>
+     * <p>
+     * Defaults to {@link ConverterTopology#BUCK_BOOST} (no restriction) when the property is absent.
+     * </p>
      */
     private volatile ConverterTopology converterTopology = ConverterTopology.BUCK_BOOST;
 
@@ -157,8 +159,7 @@ public class ConverterState {
      * Device model name, e.g. {@code "XY6008"}, {@code "DPS5020"}.
      *
      * <p>
-     * Matches the file name of the corresponding {@code .properties} file under
-     * {@code src/main/resources/devices/}.
+     * Matches the file name of the corresponding {@code .properties} file under {@code src/main/resources/devices/}.
      * </p>
      */
     private volatile String deviceName = "Unknown";
@@ -172,8 +173,8 @@ public class ConverterState {
      * Firmware version string, e.g. {@code "v1.7"}.
      *
      * <p>
-     * Set once after device detection. An empty string means the firmware version could not be
-     * read (e.g. DPS5020 batches that always return 0 from the firmware register).
+     * Set once after device detection. An empty string means the firmware version could not be read (e.g. DPS5020 batches that
+     * always return 0 from the firmware register).
      * </p>
      */
     private volatile String firmwareVersion = "";
@@ -207,10 +208,9 @@ public class ConverterState {
      * Operator-configured voltage setpoint ceiling in volts (V).
      *
      * <p>
-     * Set from the {@code serialcontroller.max.setvoltage} property at startup.
-     * A value of {@code 0.0} means no operator limit is configured; the device
-     * physical limit ({@link #maxVoltage}) governs.  When positive, neither the
-     * GUI nor the REST API may request a voltage above this value.
+     * Set from the {@code serialcontroller.max.setvoltage} property at startup. A value of {@code 0.0} means no operator limit
+     * is configured; the device physical limit ({@link #maxVoltage}) governs. When positive, neither the GUI nor the REST API
+     * may request a voltage above this value.
      * </p>
      */
     private volatile double configMaxVoltage = 0.0;
@@ -219,8 +219,8 @@ public class ConverterState {
      * Operator-configured current setpoint ceiling in amperes (A).
      *
      * <p>
-     * Set from the {@code serialcontroller.max.setcurrent} property at startup.
-     * A value of {@code 0.0} means no operator limit is configured.
+     * Set from the {@code serialcontroller.max.setcurrent} property at startup. A value of {@code 0.0} means no operator limit
+     * is configured.
      * </p>
      */
     private volatile double configMaxCurrent = 0.0;
@@ -423,8 +423,8 @@ public class ConverterState {
     }
 
     /**
-     * Sets the voltage setpoint. Called by the polling thread (to reflect front-panel changes)
-     * and by {@code DeviceService.setVoltage()}.
+     * Sets the voltage setpoint. Called by the polling thread (to reflect front-panel changes) and by
+     * {@code DeviceService.setVoltage()}.
      *
      * @param voltageSet voltage setpoint in volts (V)
      */
@@ -442,8 +442,8 @@ public class ConverterState {
     }
 
     /**
-     * Sets the current setpoint. Called by the polling thread (to reflect front-panel changes)
-     * and by {@code DeviceService.setCurrent()}.
+     * Sets the current setpoint. Called by the polling thread (to reflect front-panel changes) and by
+     * {@code DeviceService.setCurrent()}.
      *
      * @param currentSet current setpoint in amperes (A)
      */
@@ -609,7 +609,7 @@ public class ConverterState {
     }
 
     /**
-     * Sets the operator-configured voltage setpoint ceiling.  Package-private.
+     * Sets the operator-configured voltage setpoint ceiling. Package-private.
      *
      * @param configMaxVoltage max voltage in volts; {@code 0.0} means no limit
      */
@@ -627,7 +627,7 @@ public class ConverterState {
     }
 
     /**
-     * Sets the operator-configured current setpoint ceiling.  Package-private.
+     * Sets the operator-configured current setpoint ceiling. Package-private.
      *
      * @param configMaxCurrent max current in amperes; {@code 0.0} means no limit
      */
@@ -664,6 +664,7 @@ public class ConverterState {
      */
     @Override
     public String toString() {
+        // @formatter:off
         return String.format(
                 "ConverterState{device=%s %s, vOut=%.2fV, iOut=%.3fA, pOut=%.2fW, vIn=%.2fV, temp=%.1f°C, " +
                 "output=%s, protection=%d, mode=%s, vSet=%.2fV, iSet=%.3fA}",
@@ -673,5 +674,7 @@ public class ConverterState {
                 protectionState,
                 cvMode ? "CV" : "CC",
                 voltageSet, currentSet);
+        // @formatter:on
     }
+
 }

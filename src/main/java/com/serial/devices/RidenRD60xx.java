@@ -6,8 +6,8 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.serial.device.DeviceRegister;
-import com.serial.device.ModbusDevice;
+import com.serial.device.base.DeviceRegister;
+import com.serial.device.base.ModbusDevice;
 import com.serial.device.RidenRegistersRD60xx;
 import com.serial.devices.ifc.DC2DCConverter;
 import com.serial.modbus.ModbusConstants;
@@ -46,14 +46,14 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
             RidenRegistersRD60xx.REG_TEMP_FAHRENHEIT);
 
     // TODO(P-series): RD6006P and RD6012P use scale 1000 for voltage (raw / 1000.0 = volts),
-    //   not scale 100. Voltage reads/writes on a P-series device via this driver are off by 10x.
-    //   A dedicated RidenRD60xxP driver with the correct scaling is required. See doc/Riden.md.
+    // not scale 100. Voltage reads/writes on a P-series device via this driver are off by 10x.
+    // A dedicated RidenRD60xxP driver with the correct scaling is required. See doc/Riden.md.
     public static final DeviceRegister VSET = new DeviceRegister("Voltage Setpoint", "V", RidenRegistersRD60xx.REG_VSET, 100);
 
     // TODO(P-series): RD6006P and RD6012P use dynamic current scaling controlled by Register
-    //   0x0002 (Current Range Status): 0 = Low Range (0–6A, scale 10000), 1 = High Range
-    //   (6–12A, scale 1000). This fixed scale 1000 is only correct in the high-current range.
-    //   Current reads/writes in the low range are off by 10x. See doc/Riden.md.
+    // 0x0002 (Current Range Status): 0 = Low Range (0–6A, scale 10000), 1 = High Range
+    // (6–12A, scale 1000). This fixed scale 1000 is only correct in the high-current range.
+    // Current reads/writes in the low range are off by 10x. See doc/Riden.md.
     public static final DeviceRegister ISET = new DeviceRegister("Current Setpoint", "A", RidenRegistersRD60xx.REG_ISET, 1000);
 
     // TODO(P-series): See VSET note above - P-series voltage scale is 1000, not 100.
@@ -84,12 +84,15 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
             RidenRegistersRD60xx.REG_CURRENT_RANGE);
 
     // -------------------------------------------------------------------------
-    // Poll cache — populated by pollAll(), returned by all getters
+    // Poll cache - populated by pollAll(), returned by all getters
     // Block: 0x0000–0x0012 (19 registers), see bulk-read-plan.md offset map
     // -------------------------------------------------------------------------
 
-    private volatile int    cacheDeviceId;          // offset  0 DEVICE_ID        raw
+    // @formatter:off
+    private volatile int    cacheDeviceId;           // offset  0 DEVICE_ID        raw
+    @SuppressWarnings("unused")
     private volatile int    cacheSerialHigh;         // offset  1 SERIAL_HIGH      raw
+    @SuppressWarnings("unused")
     private volatile int    cacheSerialLow;          // offset  2 SERIAL_LOW       raw
     private volatile int    cacheFirmwareRaw;        // offset  3 FIRMWARE         raw (FIRMWARE_VERSION.decode())
     private volatile int    cacheTempSignCelsius;    // offset  4 TEMP_SIGN_C      raw
@@ -107,34 +110,34 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
     private volatile int    cacheProtection;         // offset 16 PROTECTION       raw
     private volatile int    cacheMode;               // offset 17 MODE             raw
     private volatile int    cacheOutput;             // offset 18 OUTPUT           raw
+    // @formatter:on
 
     /**
      * Lookup map from the raw 5-digit model ID returned by Register 0x0000 to the retail model name.
      *
      * <p>
-     * Per {@code doc/Riden.md}, Register 0x0000 on all RD60x/RK60x units returns a 5-digit integer
-     * whose first 4 digits encode the model family and whose last digit encodes a hardware revision,
-     * region variant, or Wi-Fi board option. For example:
+     * Per {@code doc/Riden.md}, Register 0x0000 on all RD60x/RK60x units returns a 5-digit integer whose first 4 digits encode
+     * the model family and whose last digit encodes a hardware revision, region variant, or Wi-Fi board option. For example:
      * </p>
      *
      * <ul>
      * <li>60060–60064 → {@code "RD6006"}</li>
-     * <li>60065       → {@code "RD6006P"} (high-precision variant)</li>
-     * <li>60066       → {@code "RK6006"}</li>
+     * <li>60065 → {@code "RD6006P"} (high-precision variant)</li>
+     * <li>60066 → {@code "RK6006"}</li>
      * <li>60120–60124 → {@code "RD6012"}</li>
-     * <li>60125       → {@code "RD6012P"} (high-precision variant)</li>
+     * <li>60125 → {@code "RD6012P"} (high-precision variant)</li>
      * <li>60180–60184 → {@code "RD6018"}</li>
      * <li>60240–60244 → {@code "RD6024"}</li>
      * <li>60300–60304 → {@code "RD6030"}</li>
      * </ul>
      *
      * <p>
-     * Using an explicit map instead of arithmetic (e.g. {@code id / 10}) correctly handles P-series
-     * variants such as 60065 → {@code "RD6006P"}, which arithmetic would wrongly map to {@code "RD6006"}.
-     * Validating against this map also prevents false positives on Sinilink hardware where Register
-     * 0x0000 holds {@code VSET} and could return any voltage value.
+     * Using an explicit map instead of arithmetic (e.g. {@code id / 10}) correctly handles P-series variants such as 60065 →
+     * {@code "RD6006P"}, which arithmetic would wrongly map to {@code "RD6006"}. Validating against this map also prevents
+     * false positives on Sinilink hardware where Register 0x0000 holds {@code VSET} and could return any voltage value.
      * </p>
      */
+    // @formatter:off
     private static final Map<Integer, String> KNOWN_DEVICE_IDS = Map.ofEntries(
             Map.entry(60060, "RD6006"),
             Map.entry(60061, "RD6006"),
@@ -165,6 +168,7 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
             Map.entry(60303, "RD6030"),
             Map.entry(60304, "RD6030")
     );
+    // @formatter:on
 
     /**
      * Constructor.
@@ -189,11 +193,10 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
      * Verify that {@code Riden RD60xx} is present probing only the specified baud rates.
      *
      * <p>
-     * Probes the device ID register (0x0000) first and validates it against {@link #KNOWN_DEVICE_IDS}.
-     * Register 0x0000 returns a 5-digit integer (e.g. 60062 for an RD6006 revision 2). The full
-     * 5-digit value is looked up in the map to obtain the correct retail model name, which handles
-     * P-series variants (e.g. 60065 → {@code "RD6006P"}) that arithmetic would misidentify.
-     * If matched, reads the firmware version register (0x0003) to complete detection.
+     * Probes the device ID register (0x0000) first and validates it against {@link #KNOWN_DEVICE_IDS}. Register 0x0000 returns
+     * a 5-digit integer (e.g. 60062 for an RD6006 revision 2). The full 5-digit value is looked up in the map to obtain the
+     * correct retail model name, which handles P-series variants (e.g. 60065 → {@code "RD6006P"}) that arithmetic would
+     * misidentify. If matched, reads the firmware version register (0x0003) to complete detection.
      * </p>
      *
      * @param bauds list of baud rates to probe in order
@@ -222,7 +225,8 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
                         }
                         this.manufacturer = "Riden";
                         this.device = modelName;
-                        logger.info("Detected Riden RD60xx (Model: {}, ID: {}, FW: {}) at {} baud.", this.device, deviceId, fw, baud);
+                        logger.info("Detected Riden RD60xx (Model: {}, ID: {}, FW: {}) at {} baud.", this.device, deviceId, fw,
+                                baud);
                     }
                 } catch (Exception e) {
                     logger.debug("Device ID read failed at {} baud: {}", baud, e.getMessage());
@@ -247,44 +251,49 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
     }
 
     /**
-     * Reads the full register block ({@code 0x0000–0x0012}, 19 registers) in a single Modbus
-     * {@code 0x03} frame and populates all poll-cache fields.
+     * Reads the full register block ({@code 0x0000–0x0012}, 19 registers) in a single Modbus {@code 0x03} frame and populates
+     * all poll-cache fields.
      *
-     * <p>Offset map (address − {@link RidenRegistersRD60xx#REG_DEVICE_ID}):</p>
+     * <p>
+     * Offset map (address − {@link RidenRegistersRD60xx#REG_DEVICE_ID}):
+     * </p>
+     * 
      * <pre>
-     *  [0]  DEVICE_ID  [1]  SERIAL_HIGH  [2]  SERIAL_LOW   [3]  FIRMWARE
+     *  [0]  DEVICE_ID   [1]  SERIAL_HIGH [2]  SERIAL_LOW   [3]  FIRMWARE
      *  [4]  TEMP_SIGN_C [5] TEMP_C       [6]  TEMP_SIGN_F  [7]  TEMP_F
-     *  [8]  VSET        [9] ISET         [10] VOUT          [11] IOUT
-     * [12]  AH         [13] POUT         [14] VIN           [15] LOCK
-     * [16]  PROTECTION [17] MODE         [18] OUTPUT
+     *  [8]  VSET        [9] ISET         [10] VOUT         [11] IOUT
+     * [12]  AH          [13] POUT        [14] VIN          [15] LOCK
+     * [16]  PROTECTION  [17] MODE        [18] OUTPUT
      * </pre>
      *
-     * <p>Scaling is delegated to {@link DeviceRegister#decode(int)} on each constant.</p>
+     * <p>
+     * Scaling is delegated to {@link DeviceRegister#decode(int)} on each constant.
+     * </p>
      *
      * @throws Exception if the Modbus read fails
      */
     @Override
     public void pollAll() throws Exception {
         final int[] r = readBlock(RidenRegistersRD60xx.REG_DEVICE_ID, 19);
-        cacheDeviceId          = r[0];
-        cacheSerialHigh        = r[1];
-        cacheSerialLow         = r[2];
-        cacheFirmwareRaw       = r[3];
-        cacheTempSignCelsius   = r[4];
-        cacheTemperature       = TEMP_CELSIUS.decode(r[5]);
+        cacheDeviceId = r[0];
+        cacheSerialHigh = r[1];
+        cacheSerialLow = r[2];
+        cacheFirmwareRaw = r[3];
+        cacheTempSignCelsius = r[4];
+        cacheTemperature = TEMP_CELSIUS.decode(r[5]);
         cacheTempSignFahrenheit = r[6];
-        cacheTemperatureFahr   = r[7];
-        cacheVoltageSet        = VSET.decode(r[8]);
-        cacheCurrentSet        = ISET.decode(r[9]);
-        cacheVoltageOut        = VOUT.decode(r[10]);
-        cacheCurrentOut        = IOUT.decode(r[11]);
-        cacheAh                = r[12];
-        cachePowerOut          = POUT.decode(r[13]);
-        cacheVoltageIn         = VIN.decode(r[14]);
-        cacheLock              = r[15];
-        cacheProtection        = r[16];
-        cacheMode              = r[17];
-        cacheOutput            = r[18];
+        cacheTemperatureFahr = r[7];
+        cacheVoltageSet = VSET.decode(r[8]);
+        cacheCurrentSet = ISET.decode(r[9]);
+        cacheVoltageOut = VOUT.decode(r[10]);
+        cacheCurrentOut = IOUT.decode(r[11]);
+        cacheAh = r[12];
+        cachePowerOut = POUT.decode(r[13]);
+        cacheVoltageIn = VIN.decode(r[14]);
+        cacheLock = r[15];
+        cacheProtection = r[16];
+        cacheMode = r[17];
+        cacheOutput = r[18];
     }
 
     @Override
@@ -375,7 +384,9 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
     /**
      * Returns the regulation mode from the poll cache.
      *
-     * <p>Register {@link RidenRegistersRD60xx#REG_MODE}: 0 = CV, 1 = CC.</p>
+     * <p>
+     * Register {@link RidenRegistersRD60xx#REG_MODE}: 0 = CV, 1 = CC.
+     * </p>
      *
      * @return {@code true} for CV mode, {@code false} for CC mode
      * @throws Exception if reading the register fails
@@ -389,10 +400,9 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
      * Returns the internal temperature in degrees Celsius from the poll cache.
      *
      * <p>
-     * The RD60xx represents temperature as a magnitude in {@link RidenRegistersRD60xx#REG_TEMP_CELSIUS}
-     * and a separate sign in {@link RidenRegistersRD60xx#REG_TEMP_SIGN_CELSIUS}
-     * ({@code 0} = positive, {@code 1} = negative). Both are populated by {@link #pollAll()};
-     * the sign is applied here before returning.
+     * The RD60xx represents temperature as a magnitude in {@link RidenRegistersRD60xx#REG_TEMP_CELSIUS} and a separate sign in
+     * {@link RidenRegistersRD60xx#REG_TEMP_SIGN_CELSIUS} ({@code 0} = positive, {@code 1} = negative). Both are populated by
+     * {@link #pollAll()}; the sign is applied here before returning.
      * </p>
      *
      * @return temperature in °C; negative values indicate below-zero readings

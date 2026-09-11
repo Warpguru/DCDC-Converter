@@ -370,8 +370,8 @@ Source: `doc/DPS5020 communication protocol V1.2.pdf`. Note: **no temperature re
 ## Key Observations for this Codebase
 
 - **VSET and ISET are always at consecutive addresses** (VSET, VSET+1) on all three devices. A single `0x10` frame can therefore set both in one serial round-trip instead of two.
-- **`0x10` with `qty=1`** is functionally equivalent to `0x06` but produces a shorter acknowledgement (8 bytes vs 8 bytes — identical). Prefer `0x06` for single-register writes; it is simpler.
+- **`0x10` with `qty=1`** is functionally equivalent to `0x06` but produces a shorter acknowledgement (8 bytes vs 8 bytes - identical). Prefer `0x06` for single-register writes; it is simpler.
 - The **`0x10` response is always 8 bytes** regardless of how many registers were written. Plan `readBytes(8)` after transmitting a multi-write frame.
 - The **`0x03` response length** is variable: `3 + (count × 2) + 2` bytes. Calculate it from the requested count before reading.
 - The **DPS50xx (RD50xx) has no temperature register**. `getTemperatureCelsius()` returns the sentinel `-999.0` for this device family and must not be wired to any bulk-read offset.
-- **CRC byte order** is confirmed by both the DPH5005 and DPS5020 documents: low byte transmitted first, high byte second — matching `ModbusCRC` / `ModbusTransport` current implementation.
+- **CRC byte order** is confirmed by both the DPH5005 and DPS5020 documents: low byte transmitted first, high byte second - matching `ModbusCRC` / `ModbusTransport` current implementation.

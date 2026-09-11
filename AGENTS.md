@@ -35,7 +35,7 @@ SerialControllerApp (entry point - wiring only)
   │     │     ├── Sinilink
   │     │     ├── RidenRD50xx
   │     │     └── RidenRD60xx
-  │     │           └── ModbusDevice (abstract)
+  │     │           └── ModbusDevice (abstract, com.serial.device.base)
   │     │                 └── ModbusTransport  # raw RTU framing via jSerialComm
   │     └── ConverterState        # all fields volatile; limit setters are package-private
   ├── WebSocketService            # owns: client set, broadcast thread (ws-broadcaster)
