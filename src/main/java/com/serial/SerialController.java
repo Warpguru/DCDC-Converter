@@ -76,7 +76,7 @@ public class SerialController {
     private void process(final String[] args) throws Exception {
         if (args.length == 0 || args.length > 2) {
             logger.info("Usage:");
-            logger.info("  java -jar SerialController.jar <port> [config-file]");
+            logger.info("  java -jar SerialController-{}.jar <port> [config-file]", SERIALCONTROLLER_VERSION);
             logger.info("Where:");
             logger.info("  <port>        Serial port name, e.g. COM3 or /dev/ttyUSB0");
             logger.info("  [config-file] Optional: fully-qualified path to a properties file.");
@@ -131,7 +131,7 @@ public class SerialController {
             cfg.registerPlugin(new OpenApiPlugin(openApiConfig -> {
                 openApiConfig.withDocumentationPath("/openapi");
                 openApiConfig.withDefinitionConfiguration((version, definition) -> {
-                    definition.info(info -> info.title("SerialController").version("1.0.0"));
+                    definition.info(info -> info.title("SerialController").version(SERIALCONTROLLER_VERSION));
                     definition.withBasicAuth("BasicAuth");
                 });
             }));

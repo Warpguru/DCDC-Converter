@@ -5,8 +5,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.serial</groupId>
-    <artifactId>serial-controller</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <artifactId>SerialController</artifactId>
+    <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <name>Serial Controller</name>
@@ -88,7 +88,28 @@
     </dependencies>
 
     <build>
-        <finalName>SerialController</finalName>
+        <finalName>${project.artifactId}-${project.version}</finalName>
+		<sourceDirectory>src/main/java</sourceDirectory>
+
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+				<filtering>true</filtering>
+				<includes>
+					<include>**</include>
+				</includes>
+			</resource>
+			<!-- Documentation and Bob skills so they survive jar distribution -->
+			<resource>
+				<directory>${project.basedir}</directory>
+				<filtering>false</filtering>
+				<includes>
+					<include>README.md</include>
+					<include>doc/**.md</include>
+				</includes>
+			</resource>
+		</resources>
+
         <plugins>
             <!-- Compiler Plugin -->
             <plugin>

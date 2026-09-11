@@ -511,7 +511,7 @@ public class ModbusTransport {
                         final String regName = DeviceRegister.REGISTRY.getOrDefault(start, String.format("0x%04X", start));
                         return "Read " + regName;
                     }
-                    return String.format("Read 0x%04X–0x%04X (%d regs)", start, start + count - 1, count);
+                    return String.format("Read 0x%04X-0x%04X (%d regs)", start, start + count - 1, count);
                 }
                 if (fc == ModbusFunctionCodes.WRITE_SINGLE_REGISTER) {
                     final String regName = DeviceRegister.REGISTRY.getOrDefault(start, String.format("0x%04X", start));
@@ -520,7 +520,7 @@ public class ModbusTransport {
                 }
                 if (fc == ModbusFunctionCodes.WRITE_MULTIPLE_REGISTERS && data.length >= 7) {
                     final int qty = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);
-                    return String.format("Write 0x%04X–0x%04X (%d regs)", start, start + qty - 1, qty);
+                    return String.format("Write 0x%04X-0x%04X (%d regs)", start, start + qty - 1, qty);
                 }
             }
         } else {

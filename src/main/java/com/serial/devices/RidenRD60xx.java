@@ -14,13 +14,16 @@ import com.serial.modbus.ModbusConstants;
 import com.serial.modbus.ModbusTransport;
 
 /**
- * {@code RidenRD60xx} (e.g. {@code RD6030}) {@code Modbus} to {@code TTL} 3.3V {@code serial} connection.
- * 
+ * Driver for Ruideng {@code RD60xx} series programmable power supplies (e.g. {@code RD6006}, {@code RD6020}, {@code RD6030}).
+ *
+ * <p>
+ * Wire connections - 4-pin TTL 3.3 V serial header on the back of the display board:
+ * </p>
  * <ul>
- * <li>RidenRD60xx Black: → Gnd
- * <li>RidenRD60xx ?: → TxD
- * <li>RidenRD60xx ?: → RxD
- * <li>RidenRD60xx Red: → NC (5V)
+ * <li>Pin 1 - Black (GND) → adapter GND</li>
+ * <li>Pin 2 - White (RxD) → adapter TxD  (device receives)</li>
+ * <li>Pin 3 - Green (TxD) → adapter RxD  (device transmits)</li>
+ * <li>Pin 4 - Red   (VCC) → <strong>NC - do not connect</strong></li>
  * </ul>
  */
 public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {

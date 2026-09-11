@@ -137,6 +137,12 @@ public final class SinilinkRegisters {
      * Voltage supplied to the converter input.
      *
      * Scaling: raw / 100 = volts
+     *
+     * Example:
+     *
+     * <pre>
+     * 1558 -> 15.58V
+     * </pre>
      */
     public static final int REG_VIN = 0x0005;
 
@@ -333,11 +339,15 @@ public final class SinilinkRegisters {
      *
      * Read only.
      *
-     * Used for device identification.
+     * Scaling: raw / 100 = version number.
      *
-     * Typical values: 10 – 100
+     * Example:
      *
-     * Used to confirm that the attached serial device is an Sinilink compatible unit.
+     * <pre>
+     * 110 -> v1.10
+     * </pre>
+     *
+     * Used to confirm that the attached serial device is a Sinilink compatible unit.
      */
     public static final int REG_FIRMWARE = 0x0017;
 
