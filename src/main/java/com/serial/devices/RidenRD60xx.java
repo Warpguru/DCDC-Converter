@@ -305,8 +305,18 @@ public class RidenRD60xx extends ModbusDevice implements DC2DCConverter {
     }
 
     @Override
+    public double getVoltageSetVerified() throws Exception {
+        return read(VSET);
+    }
+
+    @Override
     public double getCurrentSet() throws Exception {
         return cacheCurrentSet;
+    }
+
+    @Override
+    public double getCurrentSetVerified() throws Exception {
+        return read(ISET);
     }
 
     @Override

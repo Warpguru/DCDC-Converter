@@ -90,6 +90,12 @@ public class RestService {
     /** Endpoint path for administrative application shutdown. */
     public static final String PATH_EXIT = "/exit";
 
+    /** Endpoint path for verified (synchronous read-back) voltage setpoint write. */
+    public static final String PATH_VOLTAGE_VERIFIED = "/voltage/verified";
+
+    /** Endpoint path for verified (synchronous read-back) current setpoint write. */
+    public static final String PATH_CURRENT_VERIFIED = "/current/verified";
+
     /** Full URI for full converter state. */
     public static final String URI_STATE = API_CONTEXT_ROOT + PATH_STATE;
 
@@ -119,6 +125,12 @@ public class RestService {
 
     /** Full URI for administrative application shutdown. */
     public static final String URI_EXIT = API_CONTEXT_ROOT + PATH_EXIT;
+
+    /** Full URI for verified (synchronous read-back) voltage setpoint write. */
+    public static final String URI_VOLTAGE_VERIFIED = API_CONTEXT_ROOT + PATH_VOLTAGE_VERIFIED;
+
+    /** Full URI for verified (synchronous read-back) current setpoint write. */
+    public static final String URI_CURRENT_VERIFIED = API_CONTEXT_ROOT + PATH_CURRENT_VERIFIED;
 
     private final DeviceService deviceService;
 
@@ -194,6 +206,8 @@ public class RestService {
         router.put(URI_KEYPAD, this::setKeypad);
         router.post(URI_PROTECTION_CLEAR, this::clearProtection);
         router.post(URI_EXIT, this::exit);
+        router.put(URI_VOLTAGE_VERIFIED, this::setVoltageVerified);
+        router.put(URI_CURRENT_VERIFIED, this::setCurrentVerified);
     }
 
     // -------------------------------------------------------------------------
@@ -381,6 +395,60 @@ public class RestService {
     }
 
     /**
+     * Sets the output voltage setpoint and synchronously verifies the device register accepted it.
+     *
+     * <p>
+     * Writes the value to the device, waits one firmware scan cycle, reads VSET back, and retries once if the register has not
+     * yet settled. On success responds with {@code 200 OK} and a JSON body containing the confirmed value. On failure responds
+     * with {@code 409 Conflict} and a plain-text error message.
+     * </p>
+     *
+     * @param ctx the Javalin request context
+     */
+    // @formatter:off
+    @OpenApi(
+        path        = URI_VOLTAGE_VERIFIED,
+        methods     = { HttpMethod.PUT },
+        summary     = "Set output voltage (verified)",
+        description = "Sets the output voltage setpoint and synchronously confirms the device register accepted it " +
+                      "via an immediate Modbus read-back. Returns the confirmed value in the response body. " +
+                      "Use this endpoint when the caller must know the setpoint has landed before proceeding.",
+        tags        = { "Converter" },
+        requestBody = @OpenApiRequestBody(
+            required    = true,
+            description = "Voltage setpoint in volts",
+            content     = { @OpenApiContent(from = VoltageRequest.class, example = "{\"voltage\": 5.0}") }
+        ),
+        responses   = {
+            @OpenApiResponse(status = "200",
+                description = "Voltage accepted; response body contains confirmed voltageSet",
+                content     = { @OpenApiContent(from = VerifiedSetpointResponse.class) }),
+            @OpenApiResponse(status = "400", description = "Value out of range"),
+            @OpenApiResponse(status = "409", description = "Device did not accept the setpoint after two attempts"),
+            @OpenApiResponse(status = "503", description = "No device connected")
+        }
+    )
+    // @formatter:on
+    public void setVoltageVerified(final Context ctx) {
+        if (!deviceService.isDeviceDetected()) {
+            ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("No device connected");
+            return;
+        }
+        final VoltageRequest req = ctx.bodyAsClass(VoltageRequest.class);
+        logger.debug("REST PUT {}: {}", URI_VOLTAGE_VERIFIED, compactBody(ctx.body()));
+        try {
+            final double confirmed = deviceService.setVoltageVerified(req.voltage);
+            ctx.status(HttpStatus.OK).json(VerifiedSetpointResponse.ofVoltage(confirmed));
+        } catch (IllegalArgumentException e) {
+            ctx.status(HttpStatus.BAD_REQUEST).result(e.getMessage());
+        } catch (IllegalStateException e) {
+            ctx.status(HttpStatus.CONFLICT).result(e.getMessage());
+        } catch (Exception e) {
+            ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
+        }
+    }
+    
+    /**
      * Returns the most recently measured output current.
      *
      * <p>
@@ -454,6 +522,60 @@ public class RestService {
         }
     }
 
+    /**
+     * Sets the output current setpoint and synchronously verifies the device register accepted it.
+     *
+     * <p>
+     * Writes the value to the device, waits one firmware scan cycle, reads ISET back, and retries once if the register has not
+     * yet settled. On success responds with {@code 200 OK} and a JSON body containing the confirmed value. On failure responds
+     * with {@code 409 Conflict} and a plain-text error message.
+     * </p>
+     *
+     * @param ctx the Javalin request context
+     */
+    // @formatter:off
+    @OpenApi(
+        path        = URI_CURRENT_VERIFIED,
+        methods     = { HttpMethod.PUT },
+        summary     = "Set output current (verified)",
+        description = "Sets the output current setpoint and synchronously confirms the device register accepted it " +
+                      "via an immediate Modbus read-back. Returns the confirmed value in the response body. " +
+                      "Use this endpoint when the caller must know the setpoint has landed before proceeding.",
+        tags        = { "Converter" },
+        requestBody = @OpenApiRequestBody(
+            required    = true,
+            description = "Current setpoint in amperes",
+            content     = { @OpenApiContent(from = CurrentRequest.class, example = "{\"current\": 1.0}") }
+        ),
+        responses   = {
+            @OpenApiResponse(status = "200",
+                description = "Current accepted; response body contains confirmed currentSet",
+                content     = { @OpenApiContent(from = VerifiedSetpointResponse.class) }),
+            @OpenApiResponse(status = "400", description = "Value out of range"),
+            @OpenApiResponse(status = "409", description = "Device did not accept the setpoint after two attempts"),
+            @OpenApiResponse(status = "503", description = "No device connected")
+        }
+    )
+    // @formatter:on
+    public void setCurrentVerified(final Context ctx) {
+        if (!deviceService.isDeviceDetected()) {
+            ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("No device connected");
+            return;
+        }
+        final CurrentRequest req = ctx.bodyAsClass(CurrentRequest.class);
+        logger.debug("REST PUT {}: {}", URI_CURRENT_VERIFIED, compactBody(ctx.body()));
+        try {
+            final double confirmed = deviceService.setCurrentVerified(req.current);
+            ctx.status(HttpStatus.OK).json(VerifiedSetpointResponse.ofCurrent(confirmed));
+        } catch (IllegalArgumentException e) {
+            ctx.status(HttpStatus.BAD_REQUEST).result(e.getMessage());
+        } catch (IllegalStateException e) {
+            ctx.status(HttpStatus.CONFLICT).result(e.getMessage());
+        } catch (Exception e) {
+            ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
+        }
+    }
+    
     /**
      * Returns the most recently measured output power.
      *
@@ -697,6 +819,10 @@ public class RestService {
     // Private helpers
     // -------------------------------------------------------------------------
 
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
     /**
      * Returns the request body as a single-line compact JSON string, suitable for logging.
      *
@@ -917,6 +1043,51 @@ public class RestService {
          */
         public PowerReading(final double power) {
             this.power = power;
+        }
+    }
+
+    /**
+     * Response body for {@code PUT /api/voltage/verified} and {@code PUT /api/current/verified}.
+     *
+     * <p>
+     * Contains the setpoint value as confirmed by an immediate read-back from the device register. This lets the caller verify
+     * that the value actually landed on the device rather than trusting the requested value.
+     * </p>
+     *
+     * <pre>
+     * { "voltageSet": 5.00 }
+     * { "currentSet": 1.000 }
+     * </pre>
+     */
+    public static class VerifiedSetpointResponse {
+        /** Confirmed voltage setpoint in volts (V); present only in {@code PUT /api/voltage/verified} responses. */
+        public final Double voltageSet;
+        /** Confirmed current setpoint in amperes (A); present only in {@code PUT /api/current/verified} responses. */
+        public final Double currentSet;
+
+        /**
+         * Constructs a {@code VerifiedSetpointResponse} for a voltage confirmation.
+         *
+         * @param voltageSet confirmed voltage setpoint (V)
+         * @return response instance
+         */
+        public static VerifiedSetpointResponse ofVoltage(final double voltageSet) {
+            return new VerifiedSetpointResponse(voltageSet, null);
+        }
+
+        /**
+         * Constructs a {@code VerifiedSetpointResponse} for a current confirmation.
+         *
+         * @param currentSet confirmed current setpoint (A)
+         * @return response instance
+         */
+        public static VerifiedSetpointResponse ofCurrent(final double currentSet) {
+            return new VerifiedSetpointResponse(null, currentSet);
+        }
+
+        private VerifiedSetpointResponse(final Double voltageSet, final Double currentSet) {
+            this.voltageSet = voltageSet;
+            this.currentSet = currentSet;
         }
     }
 
