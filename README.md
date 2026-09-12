@@ -241,8 +241,79 @@ flowchart TD
 | `ws-broadcaster` | `WebSocketService` | Serialises `ConverterState` to JSON and pushes to all WS clients every 1 s |
 
 All `DeviceService` write methods (`setVoltage`, `setCurrent`, `setOutput`, `setKeypad`,
-`clearProtection`) are `synchronized` on the `DeviceService` instance - serialised with the
+`clearProtection`) are `synchronized` on the `DeviceService` instance — serialised with the
 poller to avoid concurrent Modbus frame collisions.
+
+### `ConverterState` consistency model
+
+`ConverterState` is a shared in-memory object with **all fields declared `volatile`**. There are
+two concurrent writers and two concurrent readers:
+
+| Actor | Writes | Reads |
+|---|---|---|
+| `modbus-poller` | measured values + setpoints (from device) | — |
+| REST / WebSocket write path | setpoints + boolean states | — |
+| REST `getState()` | — | all fields |
+| `ws-broadcaster` | — | all fields |
+
+Three complementary mechanisms keep the state consistent:
+
+**1 — `volatile` fields (visibility)**
+`volatile` guarantees that a write by one thread is immediately visible to all subsequent reads
+in other threads, without CPU-cache staleness. Because no field undergoes a compound
+read-modify-write *inside* `ConverterState` itself, `volatile` alone is sufficient for the
+data-holder class.
+
+**2 — `synchronized` on `DeviceService` (mutual exclusion)**
+All serial-port activity — both `poll()` and every write method — is `synchronized` on the
+`DeviceService` instance. This prevents two Modbus frames from being interleaved on the wire
+and maps directly to a FreeRTOS mutex in the planned ESP32 C port.
+
+**3 — Setpoint settle window (anti-flicker)**
+After `setVoltage` or `setCurrent` writes a value to the device, the device's firmware updates
+its Modbus holding registers on its own internal scan cycle. The first one or two subsequent
+poll read-backs may return a slightly different value due to quantisation or firmware pipeline
+latency before the register has fully settled. Writing that transient back into `ConverterState`
+would cause the setpoint displayed in the UI to flicker.
+
+The solution is a **2-second suppress window** per setpoint:
+
+```mermaid
+sequenceDiagram
+    participant Client as REST / WebSocket
+    participant DS as DeviceService (synchronized)
+    participant State as ConverterState
+    participant HW as Serial port
+
+    Client->>DS: setVoltage(5.0)
+    DS->>HW: write Modbus register VSET=5.0
+    DS->>State: voltageSet ← 5.0  (immediate)
+    DS->>DS: voltagePendingUntil ← now + 2 s
+
+    Note over DS,State: poll cycle 1 (e.g. 300 ms later)
+    DS->>HW: pollAll()
+    HW-->>DS: VSET=4.98  (firmware scan-cycle transient)
+    DS->>DS: now < voltagePendingUntil → skip voltageSet update
+    DS->>State: voltageOut, currentOut, … updated normally
+
+    Note over DS,State: poll cycle 2 (e.g. 1 300 ms later)
+    DS->>HW: pollAll()
+    HW-->>DS: VSET=5.00  (settled)
+    DS->>DS: now < voltagePendingUntil → skip voltageSet update
+
+    Note over DS,State: poll cycle 3 (e.g. 2 300 ms later — window expired)
+    DS->>HW: pollAll()
+    HW-->>DS: VSET=5.00
+    DS->>DS: now ≥ voltagePendingUntil → allow update
+    DS->>State: voltageSet ← 5.00  (confirmed from device)
+```
+
+The same window applies independently to `currentSet` via `currentPendingUntil`.
+
+The browser-side UI has a **mirror guard**: when the user moves a slider, the JS sets its own
+`pendingUntil` timestamp (2 s). Incoming WebSocket broadcasts do not update the slider while
+that timestamp is in the future, preventing the transient server value from fighting the user's
+in-progress input.
 
 ---
 
@@ -256,6 +327,11 @@ OpenAPI JSON spec: [`/openapi`](http://localhost:8000/openapi)
 |---|---|---|---|---|
 | `GET` | `/api/state` | - | `200` full `ConverterState` JSON | - |
 | `GET` | `/api/limits` | - | `200` `LimitsResponse` JSON | - |
+| `GET` | `/api/measurements` | - | `200` `{"voltage":…,"current":…,"power":…}` | - |
+| `GET` | `/api/voltage` | - | `200` `{"voltage":…}` measured output voltage | - |
+| `GET` | `/api/current` | - | `200` `{"current":…}` measured output current | - |
+| `GET` | `/api/power` | - | `200` `{"power":…}` measured output power | - |
+| `PUT` | `/api/measurements` | `{"voltage":5.0,"current":1.0,"power":0}` | `204` | `400` out of range · `503` no device · `500` write failure |
 | `PUT` | `/api/voltage` | `{"voltage": 5.0}` | `204` | `400` out of range · `503` no device · `500` write failure |
 | `PUT` | `/api/current` | `{"current": 1.0}` | `204` | `400` out of range · `503` no device · `500` write failure |
 | `PUT` | `/api/output` | `{"outputEnable": true}` | `204` | `503` no device · `500` write failure |
@@ -270,7 +346,7 @@ OpenAPI JSON spec: [`/openapi`](http://localhost:8000/openapi)
 | `deviceName` | string | Device model, e.g. `"XY6008"` |
 | `manufacturer` | string | Manufacturer name |
 | `firmwareVersion` | string | Firmware version string |
-| `deviceOnline` | boolean | `true` after 3 consecutive successful polls |
+| `deviceOnline` | boolean | `true` when device communication is healthy; see [Online / offline hysteresis](#online--offline-hysteresis) |
 | `converterTopology` | string | `"BUCK"`, `"BOOST"`, or `"BUCK_BOOST"` |
 | `voltageOut` | number | Measured output voltage (V) |
 | `currentOut` | number | Measured output current (A) |
@@ -514,11 +590,31 @@ entire session. If all probes fail, `ConverterState.deviceOnline` remains `false
 
 ### Online / offline hysteresis
 
-To prevent false state changes during unstable USB reconnections, the `deviceOnline` flag uses a
-symmetric threshold:
+The `deviceOnline` flag in `ConverterState` is not a direct mirror of the last poll result.
+Two asymmetric thresholds prevent false state changes during transient USB instability:
 
-- **3 consecutive poll failures** → device goes Offline and reconnect is attempted
-- **3 consecutive poll successes** → device is declared Online
+- **Serial timeout** → Offline **immediately** + reconnect attempted (a timeout is unambiguous
+  evidence the device stopped responding; no benefit to waiting)
+- **3 consecutive non-timeout poll failures** → Offline + reconnect attempted
+- **1 consecutive fully-successful poll** → back Online (a complete `pollAll()` already
+  validates every register in the block; one clean cycle is sufficient confirmation)
+
+The going-Offline threshold is higher than the coming-Online threshold intentionally: it avoids
+declaring Offline on a single glitch (e.g. OS scheduler jitter), while allowing recovery to be
+declared as soon as real communication is re-established.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Online : first successful poll after detection
+
+    Online --> Online : poll success
+    Online --> Online : non-timeout failure (consecutiveFailures < 3)
+    Online --> Offline : serial timeout (immediate)
+    Online --> Offline : 3 consecutive non-timeout failures
+
+    Offline --> Offline : poll failure / reconnect pending
+    Offline --> Online : 1 fully successful poll after reconnect
+```
 
 ---
 
