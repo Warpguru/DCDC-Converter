@@ -15,11 +15,17 @@ public interface DC2DCConverter {
     public abstract String getDevice();
 
     /**
-     * Set output voltage verified.
-     * 
-     * @param volts
-     * @throws Exception
+     * Sets the output voltage via the slow {@link com.serial.device.base.ModbusDevice#writeVerified} loop
+     * (write + 200 ms sleep + read VSET + read VOUT, up to 3 attempts).
+     *
+     * @deprecated Not called by {@link com.serial.service.DeviceService}. The verified write path in
+     *             {@link com.serial.service.DeviceService#setVoltageVerified} uses
+     *             {@link #getVoltageSetVerified()} directly for a single fast read-back at 50 ms, making
+     *             this method dead code. Retained for potential direct driver use only.
+     * @param volts voltage setpoint in volts (V)
+     * @throws Exception if the Modbus write or read-back fails
      */
+    @Deprecated
     public void setVoltageVerified(final double volts) throws Exception;
 
     /**
@@ -39,16 +45,37 @@ public interface DC2DCConverter {
     public double getVoltage() throws Exception;
 
     /**
-     * Set output current verified.
-     * 
-     * @param amperes
-     * @throws Exception
+     * Sets the output current via the slow {@link com.serial.device.base.ModbusDevice#writeVerified} loop
+     * (write + 200 ms sleep + read ISET + read IOUT, up to 3 attempts).
+     *
+     * @deprecated Not called by {@link com.serial.service.DeviceService}. The verified write path in
+     *             {@link com.serial.service.DeviceService#setCurrentVerified} uses
+     *             {@link #getCurrentSetVerified()} directly for a single fast read-back at 50 ms, making
+     *             this method dead code. Retained for potential direct driver use only.
+     * @param amperes current setpoint in amperes (A)
+     * @throws Exception if the Modbus write or read-back fails
      */
+    @Deprecated
     public void setCurrentVerified(final double amperes) throws Exception;
 
     /**
+     * Sets the output voltage and current setpoints atomically in a single Modbus {@code 0x10} Write Multiple Registers frame.
+     *
+     * <p>
+     * Because VSET and ISET are at consecutive register addresses on every supported device, both values can be written in one
+     * serial round-trip. This prevents the inter-frame gap between two separate {@code 0x06} frames from being misinterpreted
+     * by the Sinilink firmware, which does not tolerate back-to-back single-register writes without a sufficient idle time.
+     * </p>
+     *
+     * @param volts   voltage setpoint in volts (V)
+     * @param amperes current setpoint in amperes (A)
+     * @throws Exception if the Modbus write fails
+     */
+    public void setVoltageCurrent(final double volts, final double amperes) throws Exception;
+
+    /**
      * Set output current.
-     * 
+     *
      * @param amperes
      * @throws Exception
      */

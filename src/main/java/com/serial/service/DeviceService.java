@@ -379,6 +379,37 @@ public class DeviceService {
     }
 
     /**
+     * Sets the output voltage and current setpoints atomically in a single Modbus {@code 0x10} Write Multiple Registers frame.
+     *
+     * <p>
+     * Both values are validated against their respective device limits before writing. If either value is out of range an
+     * {@link IllegalArgumentException} is thrown and neither register is written.
+     * </p>
+     *
+     * <p>
+     * Using a single frame eliminates the inter-frame gap between two consecutive {@code 0x06} single-register writes. The
+     * Sinilink XY-series firmware does not tolerate back-to-back single-register writes at 115200 baud, and the poll thread can
+     * interpose its bulk read between two separate {@link #setVoltage} / {@link #setCurrent} calls. A single atomic frame
+     * avoids both problems.
+     * </p>
+     *
+     * @param volts   voltage setpoint in volts (V)
+     * @param amperes current setpoint in amperes (A)
+     * @throws IllegalArgumentException if either value is outside its device limits
+     * @throws Exception                if the Modbus write fails
+     */
+    public synchronized void setMeasurements(final double volts, final double amperes) throws Exception {
+        validateRange("Voltage", volts, state.getMinVoltage(), effectiveMaxVoltage());
+        validateRange("Current", amperes, state.getMinCurrent(), effectiveMaxCurrent());
+        logger.info("Setting voltage to {} V and current to {} A (atomic)", volts, amperes);
+        converter.setVoltageCurrent(volts, amperes);
+        state.setVoltageSet(volts);
+        state.setCurrentSet(amperes);
+        voltagePendingUntil = System.currentTimeMillis() + SETPOINT_SETTLE_MS;
+        currentPendingUntil = System.currentTimeMillis() + SETPOINT_SETTLE_MS;
+    }
+
+    /**
      * Sets the output current setpoint and verifies that the device register has accepted the value.
      *
      * <p>

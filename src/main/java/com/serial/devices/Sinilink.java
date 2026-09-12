@@ -356,6 +356,12 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
         return read(ISET);
     }
 
+    /**
+     * @deprecated Not used by {@link com.serial.service.DeviceService}. The verified write path uses
+     *             {@link #getVoltageSetVerified()} for read-back instead of this slower
+     *             {@link com.serial.device.base.ModbusDevice#writeVerified} loop (3 × 200 ms).
+     */
+    @Deprecated
     @Override
     public void setVoltageVerified(final double volts) throws Exception {
         writeVerified(VSET, VOUT, volts);
@@ -367,10 +373,21 @@ public class Sinilink extends ModbusDevice implements DC2DCConverter {
     }
 
     @Override
+    public void setVoltageCurrent(final double volts, final double amperes) throws Exception {
+        writeBlock(SinilinkRegisters.REG_VSET, new int[] { VSET.encode(volts), ISET.encode(amperes) });
+    }
+
+    @Override
     public double getVoltage() throws Exception {
         return cacheVoltageOut;
     }
 
+    /**
+     * @deprecated Not used by {@link com.serial.service.DeviceService}. The verified write path uses
+     *             {@link #getCurrentSetVerified()} for read-back instead of this slower
+     *             {@link com.serial.device.base.ModbusDevice#writeVerified} loop (3 × 200 ms).
+     */
+    @Deprecated
     @Override
     public void setCurrentVerified(final double amperes) throws Exception {
         writeVerified(ISET, IOUT, amperes);

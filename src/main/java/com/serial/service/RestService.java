@@ -307,15 +307,15 @@ public class RestService {
             ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("No device connected");
             return;
         }
-        ConverterSetpoints req = ctx.bodyAsClass(ConverterSetpoints.class);
+        final ConverterSetpoints req = ctx.bodyAsClass(ConverterSetpoints.class);
         logger.debug("REST PUT /api/measurements: {}", compactBody(ctx.body()));
         try {
-            deviceService.setVoltage(req.voltage);
-            deviceService.setCurrent(req.current);
+            deviceService.setMeasurements(req.voltage, req.current);
             ctx.status(HttpStatus.NO_CONTENT);
         } catch (IllegalArgumentException e) {
             ctx.status(HttpStatus.BAD_REQUEST).result(e.getMessage());
         } catch (Exception e) {
+            logger.error("PUT /api/measurements failed: {}", e.getMessage(), e);
             ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
         }
     }
@@ -390,6 +390,7 @@ public class RestService {
         } catch (IllegalArgumentException e) {
             ctx.status(HttpStatus.BAD_REQUEST).result(e.getMessage());
         } catch (Exception e) {
+            logger.error("PUT /api/voltage failed: {}", e.getMessage(), e);
             ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
         }
     }
@@ -444,10 +445,11 @@ public class RestService {
         } catch (IllegalStateException e) {
             ctx.status(HttpStatus.CONFLICT).result(e.getMessage());
         } catch (Exception e) {
+            logger.error("PUT {} failed: {}", URI_VOLTAGE_VERIFIED, e.getMessage(), e);
             ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
         }
     }
-    
+
     /**
      * Returns the most recently measured output current.
      *
@@ -518,6 +520,7 @@ public class RestService {
         } catch (IllegalArgumentException e) {
             ctx.status(HttpStatus.BAD_REQUEST).result(e.getMessage());
         } catch (Exception e) {
+            logger.error("PUT /api/current failed: {}", e.getMessage(), e);
             ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
         }
     }
@@ -572,10 +575,11 @@ public class RestService {
         } catch (IllegalStateException e) {
             ctx.status(HttpStatus.CONFLICT).result(e.getMessage());
         } catch (Exception e) {
+            logger.error("PUT {} failed: {}", URI_CURRENT_VERIFIED, e.getMessage(), e);
             ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
         }
     }
-    
+
     /**
      * Returns the most recently measured output power.
      *
@@ -674,6 +678,7 @@ public class RestService {
             deviceService.setOutput(req.outputEnable);
             ctx.status(HttpStatus.NO_CONTENT);
         } catch (Exception e) {
+            logger.error("PUT /api/output failed: {}", e.getMessage(), e);
             ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
         }
     }
@@ -716,6 +721,7 @@ public class RestService {
             deviceService.setKeypad(req.keypadLock);
             ctx.status(HttpStatus.NO_CONTENT);
         } catch (Exception e) {
+            logger.error("PUT /api/keypad failed: {}", e.getMessage(), e);
             ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
         }
     }
@@ -748,6 +754,7 @@ public class RestService {
             deviceService.clearProtection();
             ctx.status(HttpStatus.NO_CONTENT);
         } catch (Exception e) {
+            logger.error("POST /api/protection/clear failed: {}", e.getMessage(), e);
             ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
         }
     }
