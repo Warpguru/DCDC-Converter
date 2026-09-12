@@ -64,6 +64,19 @@ public class DeviceService {
     private static final int POLL_INTERVAL_MS = 1000;
 
     /**
+     * Milliseconds to wait between the Modbus write and the read-back in the verified write methods. One firmware scan cycle on
+     * all supported devices is well under 50 ms at 9600 baud.
+     */
+    private static final long VERIFIED_READBACK_DELAY_MS = 50L;
+
+    /**
+     * Absolute tolerance used when comparing the read-back setpoint register against the requested value in the verified write
+     * methods. Equals the finest register resolution across all supported devices (Riden RD50xx / RD60xx voltage scale 100 →
+     * 0.01 V; Sinilink current scale 1000 → 0.001 A).
+     */
+    private static final double VERIFIED_TOLERANCE = 0.01;
+
+    /**
      * Duration in milliseconds during which the poll loop will not overwrite a setpoint in {@link ConverterState} after a user
      * write.
      *
@@ -297,6 +310,56 @@ public class DeviceService {
     }
 
     /**
+     * Sets the output voltage setpoint and verifies that the device register has accepted the value.
+     *
+     * <p>
+     * Writes the setpoint, waits {@value #VERIFIED_READBACK_DELAY_MS} ms for the device firmware scan cycle to commit the
+     * register, then reads VSET back via a dedicated Modbus frame. If the read-back differs from the requested value by more
+     * than {@value #VERIFIED_TOLERANCE} V a second attempt is made after an additional {@value #VERIFIED_READBACK_DELAY_MS} ms.
+     * If the second attempt also fails, an {@link IllegalStateException} is thrown so the caller knows the setpoint did not
+     * land.
+     * </p>
+     *
+     * <p>
+     * On success the confirmed register value is written into {@link ConverterState#setVoltageSet} and returned to the caller
+     * so the HTTP response body can include it.
+     * </p>
+     *
+     * <p>
+     * This method is {@code synchronized} on {@code DeviceService} so the write and the read-back are atomic with respect to
+     * the background poller — no poll frame can interpose between them.
+     * </p>
+     *
+     * @param volts voltage setpoint in volts (V)
+     * @return the confirmed voltage setpoint as read back from the device register (V)
+     * @throws IllegalArgumentException if {@code volts} is outside the device limits
+     * @throws IllegalStateException    if the device register did not accept the value after two attempts
+     * @throws Exception                if a Modbus frame fails
+     */
+    public synchronized double setVoltageVerified(final double volts) throws Exception {
+        final double effectiveMax = effectiveMaxVoltage();
+        validateRange("Voltage", volts, state.getMinVoltage(), effectiveMax);
+        logger.info("setVoltageVerified: writing {} V", volts);
+        converter.setVoltage(volts);
+        voltagePendingUntil = System.currentTimeMillis() + SETPOINT_SETTLE_MS;
+
+        Thread.sleep(VERIFIED_READBACK_DELAY_MS);
+        double confirmed = converter.getVoltageSetVerified();
+        if (Math.abs(confirmed - volts) > VERIFIED_TOLERANCE) {
+            logger.debug("setVoltageVerified: first read-back {}, retrying", confirmed);
+            Thread.sleep(VERIFIED_READBACK_DELAY_MS);
+            confirmed = converter.getVoltageSetVerified();
+            if (Math.abs(confirmed - volts) > VERIFIED_TOLERANCE) {
+                throw new IllegalStateException(String.format(
+                        "Voltage setpoint not accepted by device: requested %.3f V, read back %.3f V", volts, confirmed));
+            }
+        }
+        logger.info("setVoltageVerified: confirmed {} V", confirmed);
+        state.setVoltageSet(confirmed);
+        return confirmed;
+    }
+
+    /**
      * Sets the output current setpoint on the device and updates {@link ConverterState#setCurrentSet}.
      *
      * <p>
@@ -313,6 +376,46 @@ public class DeviceService {
         converter.setCurrent(amperes);
         state.setCurrentSet(amperes);
         currentPendingUntil = System.currentTimeMillis() + SETPOINT_SETTLE_MS;
+    }
+
+    /**
+     * Sets the output current setpoint and verifies that the device register has accepted the value.
+     *
+     * <p>
+     * Writes the setpoint, waits {@value #VERIFIED_READBACK_DELAY_MS} ms, reads ISET back, and retries once if the value has
+     * not settled. Throws {@link IllegalStateException} if the second read-back is still out of tolerance.
+     * </p>
+     *
+     * <p>
+     * On success the confirmed register value is written into {@link ConverterState#setCurrentSet} and returned.
+     * </p>
+     *
+     * @param amperes current setpoint in amperes (A)
+     * @return the confirmed current setpoint as read back from the device register (A)
+     * @throws IllegalArgumentException if {@code amperes} is outside the device limits
+     * @throws IllegalStateException    if the device register did not accept the value after two attempts
+     * @throws Exception                if a Modbus frame fails
+     */
+    public synchronized double setCurrentVerified(final double amperes) throws Exception {
+        validateRange("Current", amperes, state.getMinCurrent(), effectiveMaxCurrent());
+        logger.info("setCurrentVerified: writing {} A", amperes);
+        converter.setCurrent(amperes);
+        currentPendingUntil = System.currentTimeMillis() + SETPOINT_SETTLE_MS;
+
+        Thread.sleep(VERIFIED_READBACK_DELAY_MS);
+        double confirmed = converter.getCurrentSetVerified();
+        if (Math.abs(confirmed - amperes) > VERIFIED_TOLERANCE) {
+            logger.debug("setCurrentVerified: first read-back {}, retrying", confirmed);
+            Thread.sleep(VERIFIED_READBACK_DELAY_MS);
+            confirmed = converter.getCurrentSetVerified();
+            if (Math.abs(confirmed - amperes) > VERIFIED_TOLERANCE) {
+                throw new IllegalStateException(String.format(
+                        "Current setpoint not accepted by device: requested %.3f A, read back %.3f A", amperes, confirmed));
+            }
+        }
+        logger.info("setCurrentVerified: confirmed {} A", confirmed);
+        state.setCurrentSet(confirmed);
+        return confirmed;
     }
 
     /**
@@ -472,7 +575,8 @@ public class DeviceService {
             state.setManufacturer(s.getManufacturer());
             try {
                 final int rawFw = s.getFirmwareVersion();
-                state.setFirmwareVersion(rawFw == 0 ? "" : ("v" + String.format("%.2f", Sinilink.FIRMWARE_VERSION.decode(rawFw))));
+                state.setFirmwareVersion(
+                        rawFw == 0 ? "" : ("v" + String.format("%.2f", Sinilink.FIRMWARE_VERSION.decode(rawFw))));
             } catch (Exception e) {
                 logger.warn("Could not read Sinilink firmware version: {}", e.getMessage());
             }
@@ -481,7 +585,8 @@ public class DeviceService {
             state.setManufacturer(r.getManufacturer());
             try {
                 final int rawFw = r.getFirmwareVersion();
-                state.setFirmwareVersion(rawFw == 0 ? "" : ("v" + String.format("%.2f", RidenRD50xx.FIRMWARE_VERSION.decode(rawFw))));
+                state.setFirmwareVersion(
+                        rawFw == 0 ? "" : ("v" + String.format("%.2f", RidenRD50xx.FIRMWARE_VERSION.decode(rawFw))));
             } catch (Exception e) {
                 logger.warn("Could not read RD50xx firmware version: {}", e.getMessage());
             }
@@ -490,7 +595,8 @@ public class DeviceService {
             state.setManufacturer(r.getManufacturer());
             try {
                 final int rawFw = r.getFirmwareVersion();
-                state.setFirmwareVersion(rawFw == 0 ? "" : ("v" + String.format("%.2f", RidenRD60xx.FIRMWARE_VERSION.decode(rawFw))));
+                state.setFirmwareVersion(
+                        rawFw == 0 ? "" : ("v" + String.format("%.2f", RidenRD60xx.FIRMWARE_VERSION.decode(rawFw))));
             } catch (Exception e) {
                 logger.warn("Could not read RD60xx firmware version: {}", e.getMessage());
             }
@@ -739,9 +845,9 @@ public class DeviceService {
      *
      * <p>
      * For {@link ConverterTopology#BUCK} converters the ceiling is {@code min(maxVoltage, voltageIn − BUCK_DROPOUT_V)}, because
-     * the device cannot boost above its input rail and silently outputs whatever it can instead of rejecting the setpoint.
-     * This method enforces the ceiling in software so the REST and WebSocket layers reject out-of-range requests with a clear
-     * error rather than silently writing a setpoint that the hardware ignores.
+     * the device cannot boost above its input rail and silently outputs whatever it can instead of rejecting the setpoint. This
+     * method enforces the ceiling in software so the REST and WebSocket layers reject out-of-range requests with a clear error
+     * rather than silently writing a setpoint that the hardware ignores.
      * </p>
      *
      * <p>

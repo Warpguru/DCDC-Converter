@@ -196,6 +196,19 @@ public interface DC2DCConverter {
     public double getVoltageSet() throws Exception;
 
     /**
+     * Reads the voltage setpoint (VSET) register directly from the device via a fresh Modbus frame, bypassing the poll cache.
+     *
+     * <p>
+     * Used by {@link DeviceService#setVoltageVerified} to confirm that the register value has settled after a write, without
+     * waiting for the next background poll cycle.
+     * </p>
+     *
+     * @return voltage setpoint in volts, read directly from the device register
+     * @throws Exception if the Modbus read fails
+     */
+    public double getVoltageSetVerified() throws Exception;
+
+    /**
      * Returns the cached current setpoint (ISET) populated by the last {@link #pollAll()} call.
      *
      * <p>
@@ -206,6 +219,19 @@ public interface DC2DCConverter {
      * @throws Exception if the underlying transport throws during the call
      */
     public double getCurrentSet() throws Exception;
+
+    /**
+     * Reads the current setpoint (ISET) register directly from the device via a fresh Modbus frame, bypassing the poll cache.
+     *
+     * <p>
+     * Used by {@link DeviceService#setCurrentVerified} to confirm that the register value has settled after a write, without
+     * waiting for the next background poll cycle.
+     * </p>
+     *
+     * @return current setpoint in amperes, read directly from the device register
+     * @throws Exception if the Modbus read fails
+     */
+    public double getCurrentSetVerified() throws Exception;
 
     /**
      * Closes and re-opens the serial transport at the same port and baud rate.

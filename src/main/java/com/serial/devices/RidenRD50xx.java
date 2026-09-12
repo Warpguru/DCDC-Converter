@@ -39,10 +39,10 @@ import com.serial.modbus.ModbusTransport;
  * Wire connections - 4-pin TTL 3.3 V serial header (front-panel cutout or rear connector):
  * </p>
  * <ul>
- * <li>Pin 1 - Black  (GND) → adapter GND</li>
- * <li>Pin 2 - Blue   (RxD) → adapter TxD  (device receives)</li>
- * <li>Pin 3 - Yellow (TxD) → adapter RxD  (device transmits)</li>
- * <li>Pin 4 - Red    (VCC) → <strong>NC - do not connect</strong></li>
+ * <li>Pin 1 - Black (GND) → adapter GND</li>
+ * <li>Pin 2 - Blue (RxD) → adapter TxD (device receives)</li>
+ * <li>Pin 3 - Yellow (TxD) → adapter RxD (device transmits)</li>
+ * <li>Pin 4 - Red (VCC) → <strong>NC - do not connect</strong></li>
  * </ul>
  */
 public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
@@ -255,8 +255,18 @@ public class RidenRD50xx extends ModbusDevice implements DC2DCConverter {
     }
 
     @Override
+    public double getVoltageSetVerified() throws Exception {
+        return read(VSET);
+    }
+
+    @Override
     public double getCurrentSet() throws Exception {
         return cacheCurrentSet;
+    }
+
+    @Override
+    public double getCurrentSetVerified() throws Exception {
+        return read(ISET);
     }
 
     @Override

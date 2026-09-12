@@ -333,7 +333,9 @@ OpenAPI JSON spec: [`/openapi`](http://localhost:8000/openapi)
 | `GET` | `/api/power` | - | `200` `{"power":…}` measured output power | - |
 | `PUT` | `/api/measurements` | `{"voltage":5.0,"current":1.0,"power":0}` | `204` | `400` out of range · `503` no device · `500` write failure |
 | `PUT` | `/api/voltage` | `{"voltage": 5.0}` | `204` | `400` out of range · `503` no device · `500` write failure |
+| `PUT` | `/api/voltage/verified` | `{"voltage": 5.0}` | `200` `{"voltageSet":5.00}` confirmed | `400` out of range · `409` not accepted · `503` no device |
 | `PUT` | `/api/current` | `{"current": 1.0}` | `204` | `400` out of range · `503` no device · `500` write failure |
+| `PUT` | `/api/current/verified` | `{"current": 1.0}` | `200` `{"currentSet":1.000}` confirmed | `400` out of range · `409` not accepted · `503` no device |
 | `PUT` | `/api/output` | `{"outputEnable": true}` | `204` | `503` no device · `500` write failure |
 | `PUT` | `/api/keypad` | `{"keypadLock": true}` | `204` | `503` no device · `500` write failure |
 | `POST` | `/api/protection/clear` | - | `204` | `503` no device · `500` write failure |
