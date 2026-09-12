@@ -240,9 +240,16 @@ flowchart TD
 | `modbus-poller` | `DeviceService` | Reads all converter registers every 1 s; `synchronized` on `DeviceService` |
 | `ws-broadcaster` | `WebSocketService` | Serialises `ConverterState` to JSON and pushes to all WS clients every 1 s |
 
-All `DeviceService` write methods (`setVoltage`, `setCurrent`, `setOutput`, `setKeypad`,
-`clearProtection`) are `synchronized` on the `DeviceService` instance — serialised with the
-poller to avoid concurrent Modbus frame collisions.
+All `DeviceService` write methods (`setVoltage`, `setCurrent`, `setMeasurements`, `setOutput`,
+`setKeypad`, `clearProtection`) are `synchronized` on the `DeviceService` instance — serialised
+with the poller to avoid concurrent Modbus frame collisions.
+
+`setMeasurements` (backing `PUT /api/measurements`) writes **both VSET and ISET in a single
+Modbus `0x10` Write Multiple Registers frame** rather than as two consecutive `0x06` Single
+Register frames. This is required because VSET and ISET are adjacent registers on all supported
+devices and the Sinilink XY-series firmware at 115200 baud cannot tolerate two back-to-back
+`0x06` frames without a sufficient inter-frame idle gap. The single `0x10` frame is also atomic
+with respect to the poll thread, which cannot interpose between the two writes.
 
 ### `ConverterState` consistency model
 
