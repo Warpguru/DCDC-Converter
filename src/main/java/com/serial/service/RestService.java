@@ -3,6 +3,8 @@ package com.serial.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.serial.AppConfiguration;
 
 import io.javalin.Javalin;
@@ -31,6 +33,11 @@ import io.javalin.security.BasicAuthCredentials;
  * </p>
  * <ul>
  * <li>{@code GET  /api/state} - full converter state snapshot</li>
+ * <li>{@code GET  /api/measurements} - measured output voltage, current and power</li>
+ * <li>{@code GET  /api/voltage} - measured output voltage</li>
+ * <li>{@code GET  /api/current} - measured output current</li>
+ * <li>{@code GET  /api/power} - measured output power</li>
+ * <li>{@code PUT  /api/measurements} - set voltage and current setpoints in one call</li>
  * <li>{@code PUT  /api/voltage} - set output voltage setpoint</li>
  * <li>{@code PUT  /api/current} - set output current setpoint</li>
  * <li>{@code PUT  /api/output} - enable or disable the output</li>
@@ -59,11 +66,17 @@ public class RestService {
     /** Endpoint path for device capability limits. */
     public static final String PATH_LIMITS = "/limits";
 
-    /** Endpoint path for output voltage setpoint. */
+    /** Endpoint path for measured output values (voltage, current, power). */
+    public static final String PATH_MEASUREMENTS = "/measurements";
+
+    /** Endpoint path for output voltage setpoint and measured output voltage. */
     public static final String PATH_VOLTAGE = "/voltage";
 
-    /** Endpoint path for output current setpoint. */
+    /** Endpoint path for output current setpoint and measured output current. */
     public static final String PATH_CURRENT = "/current";
+
+    /** Endpoint path for measured output power (read-only). */
+    public static final String PATH_POWER = "/power";
 
     /** Endpoint path for output enable/disable. */
     public static final String PATH_OUTPUT = "/output";
@@ -83,11 +96,17 @@ public class RestService {
     /** Full URI for device capability limits. */
     public static final String URI_LIMITS = API_CONTEXT_ROOT + PATH_LIMITS;
 
-    /** Full URI for output voltage setpoint. */
+    /** Full URI for measured output values (voltage, current, power). */
+    public static final String URI_MEASUREMENTS = API_CONTEXT_ROOT + PATH_MEASUREMENTS;
+
+    /** Full URI for output voltage setpoint and measured output voltage. */
     public static final String URI_VOLTAGE = API_CONTEXT_ROOT + PATH_VOLTAGE;
 
-    /** Full URI for output current setpoint. */
+    /** Full URI for output current setpoint and measured output current. */
     public static final String URI_CURRENT = API_CONTEXT_ROOT + PATH_CURRENT;
+
+    /** Full URI for measured output power (read-only). */
+    public static final String URI_POWER = API_CONTEXT_ROOT + PATH_POWER;
 
     /** Full URI for output enable/disable. */
     public static final String URI_OUTPUT = API_CONTEXT_ROOT + PATH_OUTPUT;
@@ -164,6 +183,11 @@ public class RestService {
     public void registerRoutes(final JavalinDefaultRoutingApi router) {
         router.get(URI_STATE, this::getState);
         router.get(URI_LIMITS, this::getLimits);
+        router.get(URI_MEASUREMENTS, this::getMeasurements);
+        router.get(URI_VOLTAGE, this::getVoltage);
+        router.get(URI_CURRENT, this::getCurrent);
+        router.get(URI_POWER, this::getPower);
+        router.put(URI_MEASUREMENTS, this::setMeasurements);
         router.put(URI_VOLTAGE, this::setVoltage);
         router.put(URI_CURRENT, this::setCurrent);
         router.put(URI_OUTPUT, this::setOutput);
@@ -201,34 +225,114 @@ public class RestService {
     }
 
     /**
-     * Returns the device capability limits from the current converter state.
+     * Returns the measured output voltage, current and power from the last polling cycle.
      *
      * <p>
-     * Useful for clients that need to know the valid voltage/current range before sending setpoint commands, without fetching
-     * the full state snapshot.
+     * Values are read from the in-memory {@link ConverterState} that the background poller refreshes every second. No Modbus
+     * I/O is performed on the request path, so the response is always fast.
      * </p>
      *
      * @param ctx the Javalin request context
      */
     // @formatter:off
     @OpenApi(
-        path        = URI_LIMITS,
+        path        = URI_MEASUREMENTS,
         methods     = { HttpMethod.GET },
-        summary     = "Get device limits",
-        description = "Returns the device capability limits: manufacturer, device name, and the min/max voltage, current, and power values loaded from the device properties file.",
+        summary     = "Get output measurements",
+        description = "Returns the most recently measured output voltage (V), current (A), and power (W). " +
+                      "Values are refreshed by the background Modbus poller once per second and served " +
+                      "directly from memory — no device I/O is performed on the request path.",
         tags        = { "Converter" },
         responses   = {
             @OpenApiResponse(status = "200",
-                description = "Device capability limits",
-                content     = { @OpenApiContent(from = LimitsResponse.class) })
+                description = "Current output measurements",
+                content     = { @OpenApiContent(from = ConverterSetpoints.class) })
         }
     )
     // @formatter:on
-    public void getLimits(final Context ctx) {
-        logger.debug("REST GET /api/limits");
+    public void getMeasurements(final Context ctx) {
+        logger.debug("REST GET /api/measurements");
         ConverterState s = deviceService.getState();
-        ctx.json(new LimitsResponse(s.getManufacturer(), s.getDeviceName(), s.getMinVoltage(), s.getMaxVoltage(),
-                s.getMinCurrent(), s.getMaxCurrent(), s.getMaxPower()));
+        ctx.json(new ConverterSetpoints(s.getVoltageOut(), s.getCurrentOut(), s.getPowerOut()));
+    }
+
+    /**
+     * Sets the output voltage and current setpoints in a single call.
+     *
+     * <p>
+     * Request body: {@code { "voltage": 5.0, "current": 1.0, "power": 0.0 }} — the {@code power} field is ignored (power cannot
+     * be set directly on the device).
+     * </p>
+     *
+     * @param ctx the Javalin request context
+     */
+    // @formatter:off
+    @OpenApi(
+        path        = URI_MEASUREMENTS,
+        methods     = { HttpMethod.PUT },
+        summary     = "Set voltage and current setpoints",
+        description = "Sets both the output voltage and current setpoints in a single request. " +
+                      "The power field is present for structural symmetry with GET /api/measurements but is ignored — " +
+                      "power cannot be set directly on the device.",
+        tags        = { "Converter" },
+        requestBody = @OpenApiRequestBody(
+            required    = true,
+            description = "Voltage and current setpoints; power is ignored",
+            content     = { @OpenApiContent(from = ConverterSetpoints.class,
+                            example = "{\"voltage\": 5.0, \"current\": 1.0, \"power\": 0.0}") }
+        ),
+        responses   = {
+            @OpenApiResponse(status = "204", description = "Setpoints applied successfully"),
+            @OpenApiResponse(status = "400", description = "One or both values out of range"),
+            @OpenApiResponse(status = "503", description = "No device connected")
+        }
+    )
+    // @formatter:on
+    public void setMeasurements(final Context ctx) {
+        if (!deviceService.isDeviceDetected()) {
+            ctx.status(HttpStatus.SERVICE_UNAVAILABLE).result("No device connected");
+            return;
+        }
+        ConverterSetpoints req = ctx.bodyAsClass(ConverterSetpoints.class);
+        logger.debug("REST PUT /api/measurements: {}", compactBody(ctx.body()));
+        try {
+            deviceService.setVoltage(req.voltage);
+            deviceService.setCurrent(req.current);
+            ctx.status(HttpStatus.NO_CONTENT);
+        } catch (IllegalArgumentException e) {
+            ctx.status(HttpStatus.BAD_REQUEST).result(e.getMessage());
+        } catch (Exception e) {
+            ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
+        }
+    }
+
+    /**
+     * Returns the most recently measured output voltage.
+     *
+     * <p>
+     * Served directly from the in-memory {@link ConverterState} — no Modbus I/O on the request path.
+     * </p>
+     *
+     * @param ctx the Javalin request context
+     */
+    // @formatter:off
+    @OpenApi(
+        path        = URI_VOLTAGE,
+        methods     = { HttpMethod.GET },
+        summary     = "Get output voltage",
+        description = "Returns the most recently measured output voltage in volts (V). " +
+                      "Value is refreshed by the background Modbus poller once per second.",
+        tags        = { "Converter" },
+        responses   = {
+            @OpenApiResponse(status = "200",
+                description = "Measured output voltage",
+                content     = { @OpenApiContent(from = VoltageReading.class) })
+        }
+    )
+    // @formatter:on
+    public void getVoltage(final Context ctx) {
+        logger.debug("REST GET /api/voltage");
+        ctx.json(new VoltageReading(deviceService.getState().getVoltageOut()));
     }
 
     /**
@@ -277,6 +381,35 @@ public class RestService {
     }
 
     /**
+     * Returns the most recently measured output current.
+     *
+     * <p>
+     * Served directly from the in-memory {@link ConverterState} — no Modbus I/O on the request path.
+     * </p>
+     *
+     * @param ctx the Javalin request context
+     */
+    // @formatter:off
+    @OpenApi(
+        path        = URI_CURRENT,
+        methods     = { HttpMethod.GET },
+        summary     = "Get output current",
+        description = "Returns the most recently measured output current in amperes (A). " +
+                      "Value is refreshed by the background Modbus poller once per second.",
+        tags        = { "Converter" },
+        responses   = {
+            @OpenApiResponse(status = "200",
+                description = "Measured output current",
+                content     = { @OpenApiContent(from = CurrentReading.class) })
+        }
+    )
+    // @formatter:on
+    public void getCurrent(final Context ctx) {
+        logger.debug("REST GET /api/current");
+        ctx.json(new CurrentReading(deviceService.getState().getCurrentOut()));
+    }
+
+    /**
      * Sets the output current setpoint.
      *
      * <p>
@@ -319,6 +452,66 @@ public class RestService {
         } catch (Exception e) {
             ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Device write failed");
         }
+    }
+
+    /**
+     * Returns the most recently measured output power.
+     *
+     * <p>
+     * Served directly from the in-memory {@link ConverterState} — no Modbus I/O on the request path.
+     * </p>
+     *
+     * @param ctx the Javalin request context
+     */
+    // @formatter:off
+    @OpenApi(
+        path        = URI_POWER,
+        methods     = { HttpMethod.GET },
+        summary     = "Get output power",
+        description = "Returns the most recently measured output power in watts (W). " +
+                      "Value is refreshed by the background Modbus poller once per second.",
+        tags        = { "Converter" },
+        responses   = {
+            @OpenApiResponse(status = "200",
+                description = "Measured output power",
+                content     = { @OpenApiContent(from = PowerReading.class) })
+        }
+    )
+    // @formatter:on
+    public void getPower(final Context ctx) {
+        logger.debug("REST GET /api/power");
+        ctx.json(new PowerReading(deviceService.getState().getPowerOut()));
+    }
+
+    /**
+     * Returns the device capability limits from the current converter state.
+     *
+     * <p>
+     * Useful for clients that need to know the valid voltage/current range before sending setpoint commands, without fetching
+     * the full state snapshot.
+     * </p>
+     *
+     * @param ctx the Javalin request context
+     */
+    // @formatter:off
+    @OpenApi(
+        path        = URI_LIMITS,
+        methods     = { HttpMethod.GET },
+        summary     = "Get device limits",
+        description = "Returns the device capability limits: manufacturer, device name, and the min/max voltage, current, and power values loaded from the device properties file.",
+        tags        = { "Converter" },
+        responses   = {
+            @OpenApiResponse(status = "200",
+                description = "Device capability limits",
+                content     = { @OpenApiContent(from = LimitsResponse.class) })
+        }
+    )
+    // @formatter:on
+    public void getLimits(final Context ctx) {
+        logger.debug("REST GET /api/limits");
+        ConverterState s = deviceService.getState();
+        ctx.json(new LimitsResponse(s.getManufacturer(), s.getDeviceName(), s.getMinVoltage(), s.getMaxVoltage(),
+                s.getMinCurrent(), s.getMaxCurrent(), s.getMaxPower()));
     }
 
     /**
@@ -619,6 +812,111 @@ public class RestService {
             this.minCurrent = minCurrent;
             this.maxCurrent = maxCurrent;
             this.maxPower = maxPower;
+        }
+    }
+
+    /**
+     * Data transfer object for {@code GET /api/measurements} and {@code PUT /api/measurements}.
+     *
+     * <p>
+     * Used both as a read response (carrying the three most-recently measured output quantities) and as a write request body
+     * (carrying voltage and current setpoints; the {@code power} field is ignored on write). Values are polled from the device
+     * once per second by the background Modbus thread.
+     * </p>
+     *
+     * <pre>
+     * { "voltage": 5.03, "current": 1.250, "power": 6.29 }
+     * </pre>
+     */
+    public static class ConverterSetpoints {
+        /** Output voltage in volts (V). */
+        public final double voltage;
+        /** Output current in amperes (A). */
+        public final double current;
+        /** Output power in watts (W). Read-only on the device; ignored when used as a write request. */
+        public final double power;
+
+        /**
+         * Constructs a {@code ConverterSetpoints}.
+         *
+         * <p>
+         * {@code @JsonCreator} allows Jackson to deserialize this class from a request body even though all fields are
+         * {@code final}. This is required for {@code PUT /api/measurements}.
+         * </p>
+         *
+         * @param voltage output voltage (V)
+         * @param current output current (A)
+         * @param power   output power (W); ignored on write
+         */
+        @JsonCreator
+        public ConverterSetpoints(@JsonProperty("voltage") final double voltage, @JsonProperty("current") final double current,
+                @JsonProperty("power") final double power) {
+            this.voltage = voltage;
+            this.current = current;
+            this.power = power;
+        }
+    }
+
+    /**
+     * Response body for {@code GET /api/voltage}.
+     *
+     * <pre>
+     * { "voltage": 5.03 }
+     * </pre>
+     */
+    public static class VoltageReading {
+        /** Measured output voltage in volts (V). */
+        public final double voltage;
+
+        /**
+         * Constructs a {@code VoltageReading}.
+         *
+         * @param voltage measured output voltage (V)
+         */
+        public VoltageReading(final double voltage) {
+            this.voltage = voltage;
+        }
+    }
+
+    /**
+     * Response body for {@code GET /api/current}.
+     *
+     * <pre>
+     * { "current": 1.250 }
+     * </pre>
+     */
+    public static class CurrentReading {
+        /** Measured output current in amperes (A). */
+        public final double current;
+
+        /**
+         * Constructs a {@code CurrentReading}.
+         *
+         * @param current measured output current (A)
+         */
+        public CurrentReading(final double current) {
+            this.current = current;
+        }
+    }
+
+    /**
+     * Response body for {@code GET /api/power}.
+     *
+     * <pre>
+     * { "power": 6.29 }
+     * </pre>
+     */
+    public static class PowerReading {
+        /** Measured output power in watts (W). */
+        public final double power;
+
+        /**
+         * Constructs a {@code PowerReading}.
+         *
+         * @param power measured output power (W)
+         */
+        public PowerReading(final double power) {
+            this.power = power;
         }
     }
 
