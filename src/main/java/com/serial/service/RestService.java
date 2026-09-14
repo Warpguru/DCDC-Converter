@@ -255,7 +255,7 @@ public class RestService {
         summary     = "Get output measurements",
         description = "Returns the most recently measured output voltage (V), current (A), and power (W). " +
                       "Values are refreshed by the background Modbus poller once per second and served " +
-                      "directly from memory — no device I/O is performed on the request path.",
+                      "directly from memory - no device I/O is performed on the request path.",
         tags        = { "Converter" },
         responses   = {
             @OpenApiResponse(status = "200",
@@ -274,7 +274,7 @@ public class RestService {
      * Sets the output voltage and current setpoints in a single call.
      *
      * <p>
-     * Request body: {@code { "voltage": 5.0, "current": 1.0, "power": 0.0 }} — the {@code power} field is ignored (power cannot
+     * Request body: {@code { "voltage": 5.0, "current": 1.0, "power": 0.0 }} - the {@code power} field is ignored (power cannot
      * be set directly on the device).
      * </p>
      *
@@ -286,7 +286,7 @@ public class RestService {
         methods     = { HttpMethod.PUT },
         summary     = "Set voltage and current setpoints",
         description = "Sets both the output voltage and current setpoints in a single request. " +
-                      "The power field is present for structural symmetry with GET /api/measurements but is ignored — " +
+                      "The power field is present for structural symmetry with GET /api/measurements but is ignored - " +
                       "power cannot be set directly on the device.",
         tags        = { "Converter" },
         requestBody = @OpenApiRequestBody(
@@ -324,7 +324,7 @@ public class RestService {
      * Returns the most recently measured output voltage.
      *
      * <p>
-     * Served directly from the in-memory {@link ConverterState} — no Modbus I/O on the request path.
+     * Served directly from the in-memory {@link ConverterState} - no Modbus I/O on the request path.
      * </p>
      *
      * @param ctx the Javalin request context
@@ -454,7 +454,7 @@ public class RestService {
      * Returns the most recently measured output current.
      *
      * <p>
-     * Served directly from the in-memory {@link ConverterState} — no Modbus I/O on the request path.
+     * Served directly from the in-memory {@link ConverterState} - no Modbus I/O on the request path.
      * </p>
      *
      * @param ctx the Javalin request context
@@ -584,7 +584,7 @@ public class RestService {
      * Returns the most recently measured output power.
      *
      * <p>
-     * Served directly from the in-memory {@link ConverterState} — no Modbus I/O on the request path.
+     * Served directly from the in-memory {@link ConverterState} - no Modbus I/O on the request path.
      * </p>
      *
      * @param ctx the Javalin request context

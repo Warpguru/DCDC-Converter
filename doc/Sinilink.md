@@ -10,12 +10,12 @@ Function Code `0x03`:
 
 ---
 
-## Register 0x0016 — Product Model Number
+## Register 0x0016 - Product Model Number
 
 The value returned by this register changed format between hardware generations. There are
 **two distinct encoding schemes** in the field; both must be handled.
 
-### Scheme 1 — Legacy (flat integer)
+### Scheme 1 - Legacy (flat integer)
 
 Early hardware batches return a plain decimal integer that directly encodes the model number.
 No bit manipulation is required.
@@ -41,15 +41,15 @@ values:
 | 6149 | `0x1805` | SK180S |
 | 8713 | `0x2209` | SK220S |
 
-### Scheme 2 — Modern packed encoding (`0x59xx`)
+### Scheme 2 - Modern packed encoding (`0x59xx`)
 
 Unified firmware on current production boards packs two pieces of information into the
 16-bit register:
 
-- **High byte = `0x59`** — the ASCII character `'Y'`, the 'Y' from the "XY" product-line
+- **High byte = `0x59`** - the ASCII character `'Y'`, the 'Y' from the "XY" product-line
   prefix. This is the Sinilink family gate: any value whose high byte is `0x59` is a modern
   Sinilink device.
-- **Low byte** — the control-board hardware revision (e.g. `0x12` = revision 1.8).
+- **Low byte** - the control-board hardware revision (e.g. `0x12` = revision 1.8).
 
 > The official factory name for this register is **Chan-pin Xing-hao** ("product model
 > number"), described as the "unique product identification code built into the firmware".
@@ -71,16 +71,16 @@ board hardware revision):
 ### Detection algorithm
 
 1. **Exact match against confirmed values** (legacy flat integers + documented hex words).
-   If found, use that model — no warning.
-2. **Packed-encoding fallback** — only if no exact match and high byte = `0x59`: look up the
+   If found, use that model - no warning.
+2. **Packed-encoding fallback** - only if no exact match and high byte = `0x59`: look up the
    full word in the community-reported table. If found, log a `WARN` and treat as that model
    (promote to confirmed table once verified on live hardware).
-3. **Unknown packed value** — high byte = `0x59` but word not in either table: log a `WARN`
-   and skip — do not guess.
+3. **Unknown packed value** - high byte = `0x59` but word not in either table: log a `WARN`
+   and skip - do not guess.
 
 ---
 
-## Register 0x0017 — Firmware Version
+## Register 0x0017 - Firmware Version
 
 The raw integer value divides by 100 to give the firmware version.
 
@@ -101,8 +101,8 @@ The raw integer value divides by 100 to give the firmware version.
 | XY6020L | Buck | 60 V | 20 A | 10 mA (2 decimal places) | 1200 W | 115200 |
 | XYH3680 | Buck | 36 V | 80 A | 10 mA (2 decimal places) | 2880 W | 115200 |
 | XY3607F | Buck | 36 V | 7 A | 10 mA (2 decimal places) | 250 W | 115200 |
-| SK180S | Buck | 18 V | — | — | 180 W | 115200 |
-| SK220S | Buck | 22 V | — | — | 220 W | 115200 |
+| SK180S | Buck | 18 V | - | - | 180 W | 115200 |
+| SK220S | Buck | 22 V | - | - | 220 W | 115200 |
 
 > **Note on current resolution:** The XY6008 offers 1 mA steps; the XY6020L drops to 10 mA
 > steps due to shunt resistor constraints at higher current. This affects the scaling factor

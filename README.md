@@ -11,9 +11,10 @@ with live telemetry and setpoint control.
 
 | Manufacturer | Model family | Topology |
 |---|---|---|
-| Sinilink | XY6008 (and variants) | Buck |
-| Riden / Ruideng | RD50xx series | Buck |
-| Riden / Ruideng | RD60xx series | Buck/Boost |
+| Sinilink | XY6008 (and variants: XY5008, XY6014, XY6020L, XYH3680, …) | Buck |
+| Wuzhi | ZK-6522C (and other ZK-series) | Buck |
+| Riden / Ruideng | RD50xx / DPS series | Buck |
+| Riden / Ruideng | RD60xx series | Buck |
 
 Device detection is automatic - the application probes the serial port at startup and selects
 the correct driver. See [Device Detection](#device-detection) for the probing order.
@@ -63,6 +64,27 @@ The 4-pin header is on the back of the display board.
 | **White** | RxD (device receives) | TxD |
 | **Green** | TxD (device transmits) | RxD |
 | **Red** | +5 V | **NC - do not connect** |
+
+### Wuzhi ZK-series (ZK-6522C, …)
+
+The **XH2.54-4P** 4-pin connector is on the device board (upgraded from XH1.25 on older ZK
+models for improved reliability). Use a 3.3 V USB-to-TTL adapter (e.g. ZK-U2T / CH340).
+
+| Pin | Signal | Pin (USB TTL Adapter) |
+|---|---|---|
+| 1 | GND | GND |
+| 2 | RxD (device receives) | TxD |
+| 3 | TxD (device transmits) | RxD |
+| 4 | VCC | **NC - do not connect** |
+
+> **Important:** For digital Modbus communication the **RX/GND jumper cap must be removed**
+> and the board power-cycled. With the jumper in place the device operates in analog
+> potentiometer mode and ignores all serial traffic.
+
+> **Modbus vs. physical keypad - mutually exclusive:** once the ZK-series device is connected
+> via Modbus TTL the physical keypad and display are disabled by the firmware for the duration
+> of the session. To resume keypad operation, disconnect the serial adapter and power-cycle
+> the device.
 
 > **Note:** Wire colours can vary between manufacturing batches. If in doubt, verify with a
 > multimeter: the TxD line idles **high** (~3.3 V) when no data is being transmitted.
@@ -241,7 +263,7 @@ flowchart TD
 | `ws-broadcaster` | `WebSocketService` | Serialises `ConverterState` to JSON and pushes to all WS clients every 1 s |
 
 All `DeviceService` write methods (`setVoltage`, `setCurrent`, `setMeasurements`, `setOutput`,
-`setKeypad`, `clearProtection`) are `synchronized` on the `DeviceService` instance — serialised
+`setKeypad`, `clearProtection`) are `synchronized` on the `DeviceService` instance - serialised
 with the poller to avoid concurrent Modbus frame collisions.
 
 `setMeasurements` (backing `PUT /api/measurements`) writes **both VSET and ISET in a single
@@ -258,25 +280,25 @@ two concurrent writers and two concurrent readers:
 
 | Actor | Writes | Reads |
 |---|---|---|
-| `modbus-poller` | measured values + setpoints (from device) | — |
-| REST / WebSocket write path | setpoints + boolean states | — |
-| REST `getState()` | — | all fields |
-| `ws-broadcaster` | — | all fields |
+| `modbus-poller` | measured values + setpoints (from device) | - |
+| REST / WebSocket write path | setpoints + boolean states | - |
+| REST `getState()` | - | all fields |
+| `ws-broadcaster` | - | all fields |
 
 Three complementary mechanisms keep the state consistent:
 
-**1 — `volatile` fields (visibility)**
+**1 - `volatile` fields (visibility)**
 `volatile` guarantees that a write by one thread is immediately visible to all subsequent reads
 in other threads, without CPU-cache staleness. Because no field undergoes a compound
 read-modify-write *inside* `ConverterState` itself, `volatile` alone is sufficient for the
 data-holder class.
 
-**2 — `synchronized` on `DeviceService` (mutual exclusion)**
-All serial-port activity — both `poll()` and every write method — is `synchronized` on the
+**2 - `synchronized` on `DeviceService` (mutual exclusion)**
+All serial-port activity - both `poll()` and every write method - is `synchronized` on the
 `DeviceService` instance. This prevents two Modbus frames from being interleaved on the wire
 and maps directly to a FreeRTOS mutex in the planned ESP32 C port.
 
-**3 — Setpoint settle window (anti-flicker)**
+**3 - Setpoint settle window (anti-flicker)**
 After `setVoltage` or `setCurrent` writes a value to the device, the device's firmware updates
 its Modbus holding registers on its own internal scan cycle. The first one or two subsequent
 poll read-backs may return a slightly different value due to quantisation or firmware pipeline
@@ -308,7 +330,7 @@ sequenceDiagram
     HW-->>DS: VSET=5.00  (settled)
     DS->>DS: now < voltagePendingUntil → skip voltageSet update
 
-    Note over DS,State: poll cycle 3 (e.g. 2 300 ms later — window expired)
+    Note over DS,State: poll cycle 3 (e.g. 2 300 ms later - window expired)
     DS->>HW: pollAll()
     HW-->>DS: VSET=5.00
     DS->>DS: now ≥ voltagePendingUntil → allow update
@@ -590,9 +612,10 @@ attempts to communicate at the primary baud rates first; if all fail, the second
 
 | Step | Driver | Baud rates tried |
 |---|---|---|
-| 1 | Sinilink XY6008 | **Primary:** 115200, 9600 → **Secondary:** 19200, 38400, 57600 |
-| 2 | Riden RD50xx | **Primary:** 115200, 9600 → **Secondary:** 19200, 38400, 57600 |
-| 3 | Riden RD60xx | **Primary:** 115200, 9600 → **Secondary:** 19200, 38400, 57600 |
+| 1 | Sinilink XY-series | **Primary:** 115200, 9600 → **Secondary:** 19200, 38400, 57600 |
+| 2 | Wuzhi ZK-series | **Primary:** 115200, 9600 → **Secondary:** 19200, 38400, 57600 |
+| 3 | Riden RD50xx / DPS | **Primary:** 115200, 9600 → **Secondary:** 19200, 38400, 57600 |
+| 4 | Riden RD60xx | **Primary:** 115200, 9600 → **Secondary:** 19200, 38400, 57600 |
 
 Once a driver responds successfully, detection stops and the matched driver is used for the
 entire session. If all probes fail, `ConverterState.deviceOnline` remains `false`.
@@ -633,12 +656,18 @@ Raw Modbus register values are divided by a scale factor to produce SI units:
 
 | Device | Quantity | Scale | Example |
 |---|---|---|---|
-| Sinilink XY6008 | Voltage | 100 | `500` raw = 5.00 V |
-| Sinilink XY6008 | Current | 1000 | `2500` raw = 2.500 A |
-| Sinilink XY6008 | Power | 100 | `123` raw = 1.23 W |
-| Riden RD50xx | Voltage | 100 | `500` raw = 5.00 V |
-| Riden RD50xx | Current | 100 | `250` raw = 2.50 A |
-| Riden RD50xx | Power | 100 | `123` raw = 1.23 W |
+| Sinilink XY6008 / XY6014 | Voltage | 100 | `500` raw = 5.00 V |
+| Sinilink XY6008 / XY6014 | Current | 1000 | `2500` raw = 2.500 A |
+| Sinilink XY6008 / XY6014 | Power | 100 | `123` raw = 1.23 W |
+| Sinilink XY6020L / XYH3680 | Voltage | 100 | `500` raw = 5.00 V |
+| Sinilink XY6020L / XYH3680 | Current | 100 | `250` raw = 2.50 A |
+| Sinilink XY6020L / XYH3680 | Power | 100 | `123` raw = 1.23 W |
+| Wuzhi ZK-series | Voltage | 100 | `500` raw = 5.00 V |
+| Wuzhi ZK-series | Current | 100 | `2200` raw = 22.00 A |
+| Wuzhi ZK-series | Power | 100 | `123` raw = 1.23 W |
+| Riden RD50xx / DPS | Voltage | 100 | `500` raw = 5.00 V |
+| Riden RD50xx / DPS | Current | 100 | `250` raw = 2.50 A |
+| Riden RD50xx / DPS | Power | 100 | `123` raw = 1.23 W |
 | Riden RD60xx | Voltage | 100 | `500` raw = 5.00 V |
 | Riden RD60xx | Current | 1000 | `2500` raw = 2.500 A |
 | Riden RD60xx | Power | 100 | `123` raw = 1.23 W |
