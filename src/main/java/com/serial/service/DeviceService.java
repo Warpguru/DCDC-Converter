@@ -12,6 +12,7 @@ import com.serial.AppConfiguration;
 import com.serial.devices.RidenRD50xx;
 import com.serial.devices.RidenRD60xx;
 import com.serial.devices.Sinilink;
+import com.serial.devices.Wuzhi;
 import com.serial.devices.ifc.DC2DCConverter;
 import com.serial.modbus.ModbusConstants;
 import com.serial.modbus.ModbusTransport;
@@ -327,7 +328,7 @@ public class DeviceService {
      *
      * <p>
      * This method is {@code synchronized} on {@code DeviceService} so the write and the read-back are atomic with respect to
-     * the background poller — no poll frame can interpose between them.
+     * the background poller - no poll frame can interpose between them.
      * </p>
      *
      * @param volts voltage setpoint in volts (V)
@@ -544,6 +545,15 @@ public class DeviceService {
             return true;
         }
 
+        // Try Wuzhi ZK-series
+        Wuzhi wuzhi = new Wuzhi(portName, ModbusConstants.SLAVE_ADDRESS_1);
+        detected = wuzhi.verifyDevicePresent(bauds);
+        if (wuzhi.isDeviceDetected()) {
+            converter = detected;
+            logger.info("Detected device: {} {} on port {}", wuzhi.getManufacturer(), wuzhi.getDevice(), portName);
+            return true;
+        }
+
         // Try Riden RD50xx
         RidenRD50xx ridenRD50xx = new RidenRD50xx(portName, ModbusConstants.SLAVE_ADDRESS_1);
         detected = ridenRD50xx.verifyDevicePresent(bauds);
@@ -610,6 +620,16 @@ public class DeviceService {
                         rawFw == 0 ? "" : ("v" + String.format("%.2f", Sinilink.FIRMWARE_VERSION.decode(rawFw))));
             } catch (Exception e) {
                 logger.warn("Could not read Sinilink firmware version: {}", e.getMessage());
+            }
+        } else if (converter instanceof Wuzhi w) {
+            deviceName = w.getDevice();
+            state.setManufacturer(w.getManufacturer());
+            try {
+                final int rawFw = w.getFirmwareVersion();
+                state.setFirmwareVersion(
+                        rawFw == 0 ? "" : ("v" + String.format("%.2f", Wuzhi.FIRMWARE_VERSION.decode(rawFw))));
+            } catch (Exception e) {
+                logger.warn("Could not read Wuzhi firmware version: {}", e.getMessage());
             }
         } else if (converter instanceof RidenRD50xx r) {
             deviceName = r.getDevice();
