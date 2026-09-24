@@ -201,9 +201,9 @@ public class ModbusTransport {
         out.write(frame);
         out.flush();
         byte[] resp = readBytes(7);
+        log("RX", resp, null);
         verifyCRC(resp);
         verifyResponseHeader(resp, slave, 2);
-        log("RX", resp, null);
         return ((resp[3] & 0xFF) << 8) | (resp[4] & 0xFF);
     }
 
@@ -274,9 +274,9 @@ public class ModbusTransport {
         out.flush();
         // Response: [slave][fc][byte_count][val_hi][val_lo]... × count [crc_lo][crc_hi]
         byte[] resp = readBytes(3 + count * 2 + 2);
+        log("RX", resp, null);
         verifyCRC(resp);
         verifyResponseHeader(resp, slave, count * 2);
-        log("RX", resp, null);
         final int[] values = new int[count];
         for (int i = 0; i < count; i++) {
             values[i] = ((resp[3 + i * 2] & 0xFF) << 8) | (resp[4 + i * 2] & 0xFF);
